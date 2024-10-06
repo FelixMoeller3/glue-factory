@@ -36,7 +36,7 @@ from ..settings import EVAL_PATH
 from ..utils.tensor import batch_to_device, map_tensor
 from ..utils.tools import AUCMetric
 from ..visualization.viz2d import plot_cumulative
-from .eval_pipeline import EvalPipeline
+from .eval_pipeline import EvalPipeline, exists_eval, save_eval, load_eval
 from .io import get_eval_parser, load_model, parse_eval_args
 from .utils import (
     eval_homography_dlt,
@@ -63,12 +63,7 @@ USAGE:
 
 python -m gluefactory.eval.wireframe --conf ./gluefactory/configs/superpoint+lsd+gluestick-no-matcher.yaml --overwrite
 
-TODO eval size and config integration
-    For now you can edit datasets/wireframe.py at ln 70
 """
-
-IMAGE_SHAPE = [640, 480]
-PLOT_IMG = True
 
 
 @torch.no_grad()
@@ -145,8 +140,9 @@ class WireframePipeline(EvalPipeline):
             "batch_size": 1,
             "name": "wireframe",
             "num_workers": 1,
+            "size": -1,
             "preprocessing": {
-                "resize": IMAGE_SHAPE  # [320, 240],  # we also resize during eval to have comparable metrics
+                "resize": [640, 480]  # [320, 240],  # we also resize during eval to have comparable metrics
                 # "side": "short",
             },
         },
@@ -156,10 +152,9 @@ class WireframePipeline(EvalPipeline):
             },
         },
         "eval": {
-            "estimator": "poselib",
-            "ransac_th": -1.0,  # -1 runs a bunch of thresholds and selects the best
-            "distance": "structural",
-            "distance_thresh": [1, 3, 5, 7, 100, 150, 200]
+            "distance": "orthogonal",
+            "distance_thresh": [1, 3, 5, 7, 100, 150, 200, 640],
+            "plot_images": False
         },
     }
 
@@ -194,6 +189,22 @@ class WireframePipeline(EvalPipeline):
             )
         return pred_file
 
+    def run(self, experiment_dir, model=None, overwrite=False, overwrite_eval=False):
+        """Run export+eval loop"""
+        self.save_conf(
+            experiment_dir, overwrite=overwrite, overwrite_eval=overwrite_eval
+        )
+        pred_file = self.get_predictions(
+            experiment_dir, model=model, overwrite=overwrite
+        )
+
+        f = {}
+        if not exists_eval(experiment_dir) or overwrite_eval or overwrite:
+            s, f, r = self.run_eval(self.get_dataloader(self.conf["data"]), pred_file)
+            save_eval(experiment_dir, s, f, r)
+        s, r = load_eval(experiment_dir)
+        return s, f, r
+
     def run_eval(self, loader, pred_file):
         assert pred_file.exists()
         results = defaultdict(list)
@@ -214,7 +225,7 @@ class WireframePipeline(EvalPipeline):
 
 
             # Make Plot Directory
-            if PLOT_IMG:
+            if conf.plot_images:
                 os.makedirs("./wireframe_plots", exist_ok=True)
 
             # Get Line Distances
@@ -229,7 +240,7 @@ class WireframePipeline(EvalPipeline):
                 raise NotImplementedError(f"{dist_name} is not an implemented Distance Measure")
             
 
-            if PLOT_IMG:
+            if conf.plot_images:
                 plot_images([data['view0']['image'][0].permute(1,2,0)/data['view0']['image'].max(), data['view1']['image'][0].permute(1,2,0)/data['view1']['image'].max()], ['Pred', 'GT'])
                 plot_keypoints(kpts=[pred['keypoints0'], pred['keypoints1']])
                 if pred['lines0'].shape[1] > 0:
@@ -257,18 +268,6 @@ class WireframePipeline(EvalPipeline):
             summaries[f"m{k}"] = round(np.median(arr), 3)
             summaries[f"M{k}"] = round(np.mean(arr), 3)
 
-
-        # figures = {
-        #     "homography_recall": plot_cumulative(
-        #         {
-        #             "DLT": results["H_error_ransac"],
-        #             self.conf.eval.estimator: results["H_error_ransac"],
-        #         },
-        #         [0, 10],
-        #         unit="px",
-        #         title="Homography ",
-        #     )
-        # }
         figures = {}
 
         return summaries, figures, results

@@ -3,12 +3,12 @@ model:
     extractor:
         name: gluefactory.models.lines.wireframe
         point_extractor:
-            name: gluefactory_nonfree.superpoint
+            name: extractors.superpoint_open
+            max_num_keypoints: 512
+            force_num_keypoints: True
+            detection_threshold: -1
+            nms_radius: 3
             trainable: False
-            dense_outputs: True
-            max_num_keypoints: 2048
-            force_num_keypoints: False
-            detection_threshold: 0
         line_extractor:
             name: gluefactory.models.lines.lsd
             trainable: False
@@ -19,13 +19,6 @@ model:
             merge_points: True
             merge_line_endpoints: True
             nms_radius: 3
-    # matcher:
-    #     name: gluefactory.models.matchers.gluestick
-    #     weights: checkpoint_GlueStick_MD  # This will download weights from internet
-
-    # ground_truth:    # for ETH3D, comment otherwise
-    #     name: gluefactory.models.matchers.depth_matcher
-    #     use_lines: True
 
 benchmarks:
     hpatches:
@@ -47,3 +40,12 @@ benchmarks:
         eval:
             plot_methods: [ ]    # ['sp+NN', 'sp+sg', 'superpoint+lsd+gluestick']
             plot_line_methods: [ ]    # ['superpoint+lsd+gluestick', 'sp+deeplsd+gs']
+    wireframe:
+        eval:
+            "distance": "orthogonal"
+            "distance_thresh": [1, 3, 5, 7, 100]
+            "plot_images": False
+        data:
+            "size": -1 # -1 for full size
+            "preprocessing":
+                "resize": [640, 480]
