@@ -52,6 +52,7 @@ class Wireframe(BaseDataset, torch.utils.data.Dataset):
         "subset": None,
         "ignore_large_images": True,
         "grayscale": False,
+        "size": -1,
     }
 
     def _init(self, conf):
@@ -67,7 +68,7 @@ class Wireframe(BaseDataset, torch.utils.data.Dataset):
             # URL: https://github.com/huangkuns/wireframe
 
 
-        test_size = -1 # TODO: ADD TO CONFIG
+        test_size = conf.size # TODO: ADD TO CONFIG
         self.items = sorted([x.name for x in self.root.iterdir()])[:test_size]
 
 
@@ -85,7 +86,7 @@ class Wireframe(BaseDataset, torch.utils.data.Dataset):
         file = {}
         with open(self.root / filename, 'rb') as f:
             fileread = pickle.load(f)
-            file['img'] = fileread['img']
+            file['img'] = fileread['img'] / 255
             file['lines'] = fileread['lines']
             file['points'] = fileread['points']
             file['imgname'] = fileread['imgname']
