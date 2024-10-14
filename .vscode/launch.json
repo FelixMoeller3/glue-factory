@@ -1,0 +1,21 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Glue Factory - Megadepth1500",
+            "type": "python",
+            "request": "launch",
+            "module": "gluefactory.eval.megadepth1500",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "--conf", "${workspaceFolder}/gluefactory/configs/jpldd+NN1.yaml",
+                "--overwrite"
+            ],
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"
+            }
+        }
+    ]
+ }
+ 

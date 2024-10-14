@@ -9,6 +9,7 @@ from ...geometry.desc_losses import caps_window_loss
 from ...geometry.kp_losses import kp_bce_loss, kp_ce_loss, soft_argmax_only_loss
 from ...geometry.metrics import get_repeatability_and_loc_error, matching_score
 from ..backbones.aliked import ALIKED
+
 from ..backbones.vgg_unet import VGGUNet
 from ..lines.pold2_extractor import LineExtractor
 from .superpoint import (

@@ -23,6 +23,10 @@ from gluefactory.models.utils.metrics_points import (
 from gluefactory.utils.misc import change_dict_key, sync_and_time
 from gluefactory.models.lines.pold2_extractor import LineExtractor
 
+from .superpoint import (
+    sample_descriptors_fix_sampling,   
+)
+
 default_H_params = {
     "translation": True,
     "rotation": True,
@@ -165,7 +169,7 @@ class JointPointLineDetectorDescriptor(BaseModel):
                 torch.eq(self.encoder_backbone.conv1.weight.data.clone(), old_test_val1)
             ).item()  # test if weights really loaded!
 
-        # Initialize Lightweight ALIKED model to perform OTF GT generation for descriptors if training
+        # # Initialize Lightweight ALIKED model to perform OTF GT generation for descriptors if training
         if conf.training.do and conf.training.train_descriptors.do:
             logger.warning("Load ALiked Lightweight model for descriptor training...")
             aliked_gt_cfg = {
@@ -178,6 +182,8 @@ class JointPointLineDetectorDescriptor(BaseModel):
             }
             self.aliked_lw = get_model("extractors.aliked_light")(aliked_gt_cfg).eval()
 
+            
+
         # load model checkpoint if given -> only load weights
         if conf.checkpoint is not None and Path(conf.checkpoint).exists():
             logger.warning(f"Load model parameters from checkpoint {conf.checkpoint}")
@@ -188,6 +194,53 @@ class JointPointLineDetectorDescriptor(BaseModel):
                 conf.checkpoint, map_location=torch.device("cpu")
             )
             self.load_state_dict(chkpt["model"], strict=True)
+
+        aliked_gt_cfg = {
+            "model_name": self.conf.training.train_descriptors.gt_aliked_model,
+            "max_num_keypoints": self.conf.max_num_keypoints,
+            "detection_threshold": self.conf.detection_threshold,
+            "force_num_keypoints": False,
+            "pretrained": True,
+            "nms_radius": self.conf.nms_radius,
+        }
+        self.aliked_lw = get_model("extractors.aliked_light")(aliked_gt_cfg).eval()
+        pold2_descmap_cfg = {
+            "has_descriptor": True,
+            "descriptor_dim": 128,
+            "sparse_outputs": False,
+            "trainable": False,
+            "sparse_outputs": True,
+            "has_detector": True,
+            "has_8x8_detection": True,
+            "has_descriptor": True,
+            "has_line_detection": False,
+            "is_eval": False,
+            "backbone": {
+                "model_name": 'aliked-n16',
+                "force_num_keypoints": True,
+                "detection_threshold": 0.0,
+                "max_num_keypoints": 2048,
+                "pretrained": False,
+                "trainable": False,
+                "get_scores": False,
+            },
+            "max_num_keypoints": 2048,
+            "detection_threshold": 0.0,
+            "force_num_keypoints": True,
+            "refinement_radius": 3,
+            "descriptor_dim": 128,
+            "desc_loss": 'caps', # 'triplet', 'nll', or 'caps'
+            "detect_lines": False,
+        }
+        self.pold2_model = get_model("extractors.joint_point_line")(pold2_descmap_cfg).eval()
+        pold2_checkpoint_path = '/media/egoedeke/a9a96a4d-b323-489e-a833-13f4ade040c8/glue-factory/checkpoints/weights_kbp/RUN_8x8_HA_NEW/checkpoint_best.tar'
+        checkpoint = torch.load(pold2_checkpoint_path)
+        self.pold2_model.load_state_dict(checkpoint, strict=False)
+        
+        self.pold2_model.eval()
+            
+
+
 
     # Utility methods for line df and af with deepLSD
     def normalize_df(self, df):
@@ -314,10 +367,36 @@ class JointPointLineDetectorDescriptor(BaseModel):
 
         keypoint_descriptors, _ = self.descriptor_branch(feature_map, keypoints)
 
+        # pass image to 
+        with torch.no_grad():
+            dense_feat = self.pold2_model.backbone({'image': image})
+            desc = self.pold2_model.desc_head(dense_feat)
+            desc = F.normalize(desc, p=2, dim=1)
+
+            pold2_desc = [sample_descriptors_fix_sampling(k[None], d[None], 1)[0] for k, d in zip(keypoints, desc)]
+            pold2_desc = torch.stack(pold2_desc)
+            # pold2_desc = F.normalize(pold2_desc, p=2, dim=2)
+
+
+            
+
+
+
+
+        # get groundtruth descriptors
+        # aliked_desc = self.get_groundtruth_descriptors({"keypoints": keypoints, "image": image})
+        
+        # output["descriptors"] = aliked_desc['aliked_descriptors']
+
+        # print("pred desc shape: ", pold2_desc.shape)
+        # print("aliked desc shape: ", aliked_desc['aliked_descriptors'].shape)
+
+        output["descriptors"] = pold2_desc
+
         if self.conf.timeit:
             self.timings["descriptor-branch"].append(sync_and_time() - start_desc)
 
-        output["descriptors"] = torch.stack(keypoint_descriptors)  # B N D
+        # output["descriptors"] = torch.stack(keypoint_descriptors)  # B N D
 
         # Extract Lines from Learned Part of the Network
         # Only Perform line detection when NOT in training mode
