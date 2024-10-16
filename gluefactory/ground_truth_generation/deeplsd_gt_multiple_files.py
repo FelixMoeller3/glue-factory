@@ -182,6 +182,9 @@ if __name__ == "__main__":
     out_folder_path = EVAL_PATH / args.output_folder
     out_folder_path.mkdir(exist_ok=True, parents=True)
 
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "12355"
+
     print("OUTPUT PATH: ", out_folder_path)
     print("NUMBER OF HOMOGRAPHIES: ", args.num_H)
     print("N DATALOADER JOBS: ", args.n_jobs_dataloader)
