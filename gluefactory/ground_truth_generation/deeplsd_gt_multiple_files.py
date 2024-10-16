@@ -7,6 +7,7 @@ import argparse
 import multiprocessing
 import os
 from pathlib import Path
+from tqdm import tqdm
 
 import h5py
 import torch
@@ -113,7 +114,7 @@ def export_ha_parallel(
     image_list = [elem[:-1] for elem in image_list]
     net = DeepLSD({}).to(device)
     index = rank
-    for img_data in data_loader:
+    for img_data in tqdm(data_loader):
         if img_data["name"][0] in image_list:
             print(
                 f"Rank {rank}: Skipping image {img_data['name'][0]} because it already has GT",
@@ -137,7 +138,7 @@ def export_ha_seq(data_loader, output_folder_path, num_H, device, image_name_lis
         image_list = f.readlines()
     image_list = [elem[:-1] for elem in image_list]
     index = 0
-    for img_data in data_loader:
+    for img_data in tqdm(data_loader):
         if img_data["name"][0] in image_list:
             print(
                 f"Skipping image {img_data['name'][0]} because it already has GT",
