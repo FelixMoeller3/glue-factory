@@ -43,7 +43,7 @@ def get_dataset_and_loader(
     dset_config = {
         "name": "minidepth",  # name of dataset class in gluefactory > datasets
         "grayscale": True,  # commented out things -> dataset must also have these keys but has not
-        "preprocessing": None,
+        "preprocessing": {},
         "train_batch_size": 1,  # prefix must match split mode
         "num_workers": num_workers,
         "split": "all",  # if implemented by dataset class gives different splits
