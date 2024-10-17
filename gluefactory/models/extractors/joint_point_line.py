@@ -101,16 +101,16 @@ class JointPointLine(BaseModel):
     }
 
     def _init(self, conf):
-        if conf.has_8x8_detection:
-            if conf.backbone.get_scores == True:
-                raise ValueError(
-                    "8x8 detection is enabled. Set get_scores in Backbone to False."
-                )
-        else:
-            if conf.backbone.get_scores == False:
-                raise ValueError(
-                    "8x8 detection is disabled. Set get_scores in Backbone to True."
-                )
+        # if conf.has_8x8_detection:
+        #     if conf.backbone.get_scores == True:
+        #         raise ValueError(
+        #             "8x8 detection is enabled. Set get_scores in Backbone to False."
+        #         )
+        # else:
+            # if conf.backbone.get_scores == False:
+            #     raise ValueError(
+            #         "8x8 detection is disabled. Set get_scores in Backbone to True."
+            #     )
 
         self.backbone = ALIKED_backbone(conf.backbone)
 

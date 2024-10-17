@@ -209,9 +209,8 @@ class JointPointLineDetectorDescriptor(BaseModel):
             "descriptor_dim": 128,
             "sparse_outputs": False,
             "trainable": False,
-            "sparse_outputs": True,
             "has_detector": True,
-            "has_8x8_detection": True,
+            "has_8x8_detection": False,
             "has_descriptor": True,
             "has_line_detection": True,
             "is_eval": False,
@@ -233,11 +232,14 @@ class JointPointLineDetectorDescriptor(BaseModel):
             "detect_lines": False,
         }
         self.pold2_model = get_model("extractors.joint_point_line")(pold2_descmap_cfg).eval()
-        pold2_checkpoint_path = '/media/egoedeke/a9a96a4d-b323-489e-a833-13f4ade040c8/glue-factory/checkpoints/weights_kbp/RUN_8x8_HA_NEW/checkpoint_best.tar'
+        pold2_checkpoint_path = '/media/egoedeke/a9a96a4d-b323-489e-a833-13f4ade040c8/glue-factory/checkpoints/weights_kbp/HA_FIXED_8x8/checkpoint_best.tar'
+        print(self.pold2_model)
         checkpoint = torch.load(pold2_checkpoint_path)
         st_dict = checkpoint['model']
         st_dict = {k.replace('extractor.', ''): v for k, v in st_dict.items()}
         st_dict = {k.replace('score_head.', 'score_head.score_head.'): v for k, v in st_dict.items()}
+        st_dict = {k:v for k,v in st_dict.items() if 'score_map_head' not in k}
+        st_dict = {k:v for k,v in st_dict.items() if 'patch_scores_head' not in k}
         self.pold2_model.load_state_dict(st_dict, strict=True)
         
         self.pold2_model.eval()
@@ -374,10 +376,12 @@ class JointPointLineDetectorDescriptor(BaseModel):
 
         # pass image to 
         with torch.no_grad():
-            dense_feat = self.pold2_model.backbone({'image': image})
-            feature_map =  dense_feat['feature_map']
-            desc = self.pold2_model.desc_head(feature_map)
-            desc = F.normalize(desc, p=2, dim=1)
+            dense_feat = self.pold2_model({'image': image})
+            # feature_map =  dense_feat['feature_map']
+            # desc = self.pold2_model.desc_head(feature_map)
+            
+            # desc = F.normalize(desc, p=2, dim=1)
+            desc = dense_feat['dense_desc']
 
             pold2_desc = [sample_descriptors_fix_sampling(k[None], d[None], 1)[0] for k, d in zip(keypoints, desc)]
             pold2_desc = torch.stack(pold2_desc)
