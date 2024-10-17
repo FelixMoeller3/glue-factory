@@ -3,10 +3,11 @@ data:
     data_dir: "revisitop1m_POLD2/jpg"  # as subdirectory of DATA_PATH(defined in settings.py)
     grayscale: False
     num_workers: 6  # defines processes used in Dataloader
-    train_batch_size: 8  # per GPU
-    val_batch_size: 8
+    train_batch_size: 4  # per GPU
+    val_batch_size: 4
     prefetch_factor: 8
-    reshape: [ 400, 400 ]
+    reshape: null
+    square_pad: True
     load_features:
         do: True
         check_exists: True
@@ -15,6 +16,10 @@ data:
             use_score_heatmap: False
         line_gt:
             data_keys: [ "deeplsd_distance_field", "deeplsd_angle_field" ]
+    multiscale_learning:
+        do: True
+        scales_list: [400, 600]
+        scale_selection: 'random'
     val_size: 500
     train_size: 11500
     
