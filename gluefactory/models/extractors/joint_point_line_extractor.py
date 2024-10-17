@@ -213,7 +213,7 @@ class JointPointLineDetectorDescriptor(BaseModel):
             "has_detector": True,
             "has_8x8_detection": True,
             "has_descriptor": True,
-            "has_line_detection": False,
+            "has_line_detection": True,
             "is_eval": False,
             "backbone": {
                 "model_name": 'aliked-n16',
@@ -235,7 +235,10 @@ class JointPointLineDetectorDescriptor(BaseModel):
         self.pold2_model = get_model("extractors.joint_point_line")(pold2_descmap_cfg).eval()
         pold2_checkpoint_path = '/media/egoedeke/a9a96a4d-b323-489e-a833-13f4ade040c8/glue-factory/checkpoints/weights_kbp/RUN_8x8_HA_NEW/checkpoint_best.tar'
         checkpoint = torch.load(pold2_checkpoint_path)
-        self.pold2_model.load_state_dict(checkpoint, strict=False)
+        st_dict = checkpoint['model']
+        st_dict = {k.replace('extractor.', ''): v for k, v in st_dict.items()}
+        st_dict = {k.replace('score_head.', 'score_head.score_head.'): v for k, v in st_dict.items()}
+        self.pold2_model.load_state_dict(st_dict, strict=True)
         
         self.pold2_model.eval()
             
@@ -367,10 +370,13 @@ class JointPointLineDetectorDescriptor(BaseModel):
 
         keypoint_descriptors, _ = self.descriptor_branch(feature_map, keypoints)
 
+        keypoints = [torch.flip(k, [1]).float() for k in keypoints]
+
         # pass image to 
         with torch.no_grad():
             dense_feat = self.pold2_model.backbone({'image': image})
-            desc = self.pold2_model.desc_head(dense_feat)
+            feature_map =  dense_feat['feature_map']
+            desc = self.pold2_model.desc_head(feature_map)
             desc = F.normalize(desc, p=2, dim=1)
 
             pold2_desc = [sample_descriptors_fix_sampling(k[None], d[None], 1)[0] for k, d in zip(keypoints, desc)]

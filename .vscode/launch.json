@@ -18,4 +18,49 @@
         }
     ]
  }
- 
+
+// {
+//     "version": "0.2.0",
+//     "configurations": [
+//         {
+//             "name": "Generate Minidepth GT",
+//             "type": "python",
+//             "request": "launch",
+//             "program": "${workspaceFolder}/gluefactory/ground_truth_generation/superpoint_gt_multi_files_heatmap.py",
+//             "args": [
+//                 "minidepth",
+//                 "--output_folder", "superpoint_gt",
+//                 "--num_H", "100",
+//                 "--n_jobs", "2",
+//                 "--n_jobs_dataloader", "2"
+//             ],
+//             "console": "integratedTerminal",
+//             "env": {
+//                 "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"
+//             }
+//         }
+//     ]
+// }
+
+// {
+//     "version": "0.2.0",
+//     "configurations": [
+//         {
+//             "name": "Generate Distance and Angle Fields for Minidepth",
+//             "type": "python",
+//             "request": "launch",
+//             "program": "${workspaceFolder}/gluefactory/ground_truth_generation/deeplsd_gt_multiple_files.py",
+//             "args": [
+//                 "--output_folder", "deeplsd_gt",
+//                 "--num_H", "100",
+//                 "--n_jobs_dataloader", "1",
+//                 "--n_gpus", "1",
+//                 "--image_name_list", "minidepth_image_list.txt"
+//             ],
+//             "console": "integratedTerminal",
+//             "env": {
+//                 "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"
+//             }
+//         }
+//     ]
+// }

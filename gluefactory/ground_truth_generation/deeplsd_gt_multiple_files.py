@@ -59,18 +59,18 @@ def get_dataset_and_loader(
     num_workers, distributed: bool = False
 ):  # folder where dataset images are placed
     config = {
-        "name": "oxford_paris_mini",  # name of dataset class in gluefactory > datasets
+        "name": "minidepth",  # name of dataset class in gluefactory > datasets
         "grayscale": True,  # commented out things -> dataset must also have these keys but has not
-        "preprocessing": {"resize": [800, 800]},
+        # "preprocessing": {"resize": [800, 800]},
         "train_batch_size": 1,  # prefix must match split mode
         "num_workers": num_workers,
-        "split": "train",  # if implemented by dataset class gives different splits
+        "split": "all",  # if implemented by dataset class gives different splits
         "prefetch_factor": None if num_workers == 0 else 2,
     }
     omega_conf = OmegaConf.create(config)
     dataset = get_dataset(omega_conf.name)(omega_conf)
     loader = dataset.get_data_loader(
-        omega_conf.get("split", "train"), shuffle=False, distributed=distributed
+        omega_conf.get("split", "all"), shuffle=False, distributed=distributed
     )
     return loader
 
@@ -79,8 +79,8 @@ def process_image(img_data, net, num_H, output_folder_path, device):
     img = img_data["image"].to(device)  # B x C x H x W
     # Run homography adaptation
     distance_field, angle_field, _ = generate_ground_truth_with_homography_adaptation(
-        img, net, num_H=num_H, bs=6
-    )
+            img, net, num_H=num_H, bs=1)
+
     assert (
         len(img_data["name"]) == 1
     ), f"Image data name is {img_data['name']}"  # Currently expect batch size one!

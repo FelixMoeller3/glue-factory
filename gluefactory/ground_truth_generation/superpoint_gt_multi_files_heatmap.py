@@ -72,16 +72,19 @@ homography_params = {
 
 def get_dataset_and_loader(num_workers: int, dataset: str):  # folder where dataset images are placed
     print("Loading Dataset {}...".format(dataset))
+    
+
     config = {
         "name": dataset,  # name of dataset class in gluefactory > datasets
         "grayscale": True,  # commented out things -> dataset must also have these keys but has not
-        "preprocessing": {"resize": [800, 800]},
+        #"preprocessing": {"resize": [800, 800]},
         "train_batch_size": 1,  # prefix must match split mode
         "val_batch_size": 1,  # prefix must match split mode
         "all_batch_size": 1,
         "num_workers": num_workers,
         "split": "all" if dataset == "minidepth" else "train",  # if implemented by dataset class gives different splits
     }
+
     omega_conf = OmegaConf.create(config)
     dataset = get_dataset(omega_conf.name)(omega_conf)
     loader = dataset.get_data_loader(omega_conf.get("split", "all"))
@@ -242,7 +245,7 @@ def export_ha(data_loader, output_folder_path, num_H, n_jobs):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("dataset", choices=["minidepth", "oxford_paris_mini"])
+    parser.add_argument("dataset", choices=["megadepth", "minidepth", "oxford_paris_mini"])
     parser.add_argument(
         "--output_folder", type=str, help="Output folder.", default="superpoint_gt"
     )

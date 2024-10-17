@@ -31,11 +31,12 @@ class MiniDepthDataset(BaseDataset):
         "val_batch_size": 1,
         "all_batch_size": 1,
         "device": None,  # specify device to move image data to. if None is given, just read, skip move to device
-        "split": "train",  # train, val, test
+        "split": "all",  # train, val, test
         "seed": 0,
         "num_workers": 0,  # number of workers used by the Dataloader
         "prefetch_factor": None,
-        "preprocessing": {"resize": [800, 800]},
+        # "preprocessing": {"resize": [800, 800]},
+        "preprocessing": {"resize": None},
         "load_features": {
             "do": False,
             "check_exists": True,
