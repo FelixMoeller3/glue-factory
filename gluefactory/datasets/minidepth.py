@@ -50,7 +50,7 @@ class MiniDepthDataset(BaseDataset):
             "point_gt": {
                 "data_keys": ["superpoint_heatmap", "gt_keypoints", "gt_keypoints_scores"],  # heatmap is generated based on keypoints
                 "use_score_heatmap": False,
-                "max_num_keypoints": 76, # the number of gt_keypoints used for training. The heatmap is generated using all kp. (IN KP GT KP ARE SORTED BY SCORE) 
+                "max_num_keypoints": 76, # the number of gt_keypoints used for training. The heatmap is generated using all kp. (IN KP GT KP ARE SORTED BY SCORE)
                                           # -> Can also be set to None to return all points but this can only be used when batchsize=1. Min num kp in minidepth:  76
             },
             "line_gt": {
@@ -184,8 +184,8 @@ class _Dataset(torch.utils.data.Dataset):
         if self.conf.device is not None:
             img = img.to(self.conf.device)
         return img
-    
-    
+
+
     def register_image_preprocessor_for_size(self, size: int) -> None:
         """
         We use image preprocessor to reshape images and square pad them. We resize keeping the aspect ratio of images.
@@ -202,7 +202,7 @@ class _Dataset(torch.utils.data.Dataset):
                                                         "square_pad": bool(self.conf.square_pad),
                                                         "add_padding_mask": True,}
                                                      )
-        
+
 
     def _read_groundtruth(self, image_path, shape: int = None) -> dict:
         """
@@ -254,7 +254,7 @@ class _Dataset(torch.utils.data.Dataset):
         kp_file_content = torch.from_numpy(np.load(point_gt_file_path)).to(dtype=torch.float32)  # file contains (N, 3) shape np-array -> 1st two cols for kp x,y 3rd for kp-score
         keypoints = kp_file_content[:, [1, 0]]
         keypoint_scores = kp_file_content[:, 2]
-        
+
         # scale points and create heatmap
         heatmap = np.zeros_like(df)  # df is potentioally already reshaped to new image size
         keypoints = (keypoints * reshape_scales) if reshape_scales is not None else keypoints
@@ -306,8 +306,8 @@ class _Dataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.image_paths)
-    
-    
+
+
     def do_change_size_now(self) -> bool:
         """
         Based on current state decides whether to change shape to reshape images to.
@@ -323,7 +323,7 @@ class _Dataset(torch.utils.data.Dataset):
             return True
         else:
             return False
-        
+
 
     def select_resize_shape(self, original_img_size: tuple):
         """
@@ -361,8 +361,8 @@ class _Dataset(torch.utils.data.Dataset):
                 return self.current_scale
 
         raise Exception("Shouldn't end up here!")
-    
-    
+
+
     def set_num_selected_with_current_scale(self, value: int) -> None:
         """
         Sets the self.num_selected_with_current_scale variable to a certain value.
@@ -385,8 +385,8 @@ class _Dataset(torch.utils.data.Dataset):
             int: current scale used to reshape in multi-scale training. None if its deactivated
         """
         return self.current_scale
-    
-    
+
+
     def set_current_scale(self, value):
         """
         Sets the current scale used for multiscale training. Used to set size of reshape of this dataset during batch.

@@ -61,7 +61,7 @@ def process_image(img_data, net, num_H, output_folder_path, device):
     img = img_data["image"].to(device)  # B x C x H x W
     # Run homography adaptation
     distance_field, angle_field, _ = generate_ground_truth_with_homography_adaptation(
-        img, net, num_H=num_H, bs=6
+        img, net, num_H=num_H, bs=2
     )
     assert (
         len(img_data["name"]) == 1
