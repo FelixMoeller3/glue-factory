@@ -50,7 +50,7 @@ class MiniDepthDataset(BaseDataset):
             "point_gt": {
                 "data_keys": ["superpoint_heatmap", "gt_keypoints", "gt_keypoints_scores"],  # heatmap is generated based on keypoints
                 "use_score_heatmap": False,
-                "max_num_keypoints": 76, # the number of gt_keypoints used for training. The heatmap is generated using all kp. (IN KP GT KP ARE SORTED BY SCORE) 
+                "max_num_keypoints": 76, # the number of gt_keypoints used for training. The heatmap is generated using all kp. (IN KP GT KP ARE SORTED BY SCORE)
                                           # -> Can also be set to None to return all points but this can only be used when batchsize=1. Min num kp in minidepth:  76
                 "use_deeplsd_lineendpoints_as_kp_gt": False,  # set true to use deep-lsd line endpoints as keypoint groundtruth
                 "use_superpoint_kp_gt": True  # set true to use default HA-Superpoint groundtruth
@@ -96,7 +96,7 @@ class _Dataset(torch.utils.data.Dataset):
         self.conf = conf
         self.grayscale = bool(conf.grayscale)
         self.max_num_gt_kp = conf.load_features.point_gt.max_num_keypoints
-        
+
         # we can configure whether we want to load superpoint kp-gt, deeplsd_lineEP lp-gt or both
         self.use_superpoint_kp_gt = conf.load_features.point_gt.use_superpoint_kp_gt
         self.use_dlsd_ep_as_kp_gt = conf.load_features.point_gt.use_deeplsd_lineendpoints_as_kp_gt
@@ -195,8 +195,8 @@ class _Dataset(torch.utils.data.Dataset):
         if self.conf.device is not None:
             img = img.to(self.conf.device)
         return img
-    
-    
+
+
     def register_image_preprocessor_for_size(self, size: int) -> None:
         """
         We use image preprocessor to reshape images and square pad them. We resize keeping the aspect ratio of images.
@@ -213,7 +213,7 @@ class _Dataset(torch.utils.data.Dataset):
                                                         "square_pad": bool(self.conf.square_pad),
                                                         "add_padding_mask": True,}
                                                      )
-        
+
 
     def _read_groundtruth(self, image_path, shape: int = None) -> dict:
         """
@@ -266,7 +266,7 @@ class _Dataset(torch.utils.data.Dataset):
             af = self.preprocessors[shape](af.unsqueeze(0))['image'].squeeze(0)
         ground_truth[af_gt_key] = af
         ground_truth[df_gt_key] = df
-        
+
         # Read data for points
         keypoints = None
         keypoint_scores = None
@@ -343,8 +343,8 @@ class _Dataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.image_paths)
-    
-    
+
+
     def do_change_size_now(self) -> bool:
         """
         Based on current state decides whether to change shape to reshape images to.
@@ -360,7 +360,7 @@ class _Dataset(torch.utils.data.Dataset):
             return True
         else:
             return False
-        
+
 
     def select_resize_shape(self, original_img_size: tuple):
         """
@@ -398,8 +398,8 @@ class _Dataset(torch.utils.data.Dataset):
                 return self.current_scale
 
         raise Exception("Shouldn't end up here!")
-    
-    
+
+
     def set_num_selected_with_current_scale(self, value: int) -> None:
         """
         Sets the self.num_selected_with_current_scale variable to a certain value.
@@ -422,8 +422,8 @@ class _Dataset(torch.utils.data.Dataset):
             int: current scale used to reshape in multi-scale training. None if its deactivated
         """
         return self.current_scale
-    
-    
+
+
     def set_current_scale(self, value):
         """
         Sets the current scale used for multiscale training. Used to set size of reshape of this dataset during batch.
