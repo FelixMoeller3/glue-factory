@@ -1,0 +1,69 @@
+model:
+    name: gluefactory.models.two_view_pipeline
+    extractor:
+        name: joint_point_line_extractor
+        max_num_keypoints: 500  # setting for training, for eval: -1
+        timeit: True  # override timeit: False from BaseModel
+        line_df_decoder_channels: 32
+        line_af_decoder_channels: 32
+        line_detection:
+            do: True
+            conf:
+                max_point_size: 1500
+                min_line_length: 60
+                max_line_length: null
+                samples: [8, 16, 32]
+
+                distance_map: 
+                    threshold: 0.5
+                    avg_filter_size: 13
+                    smooth_threshold: 0.85
+                    avg_filter_padding: 6
+                    avg_filter_stride: 1
+                    max_value: 5
+                    inlier_ratio: 0.9
+                    mean_value_ratio: 0.5
+                    max_accepted_mean_value: 0.3
+
+                mlp_conf: 
+                    has_angle_field: True
+                    has_distance_field: True
+                    num_bands: 3
+                    band_width: 1
+                    num_line_samples: 150    # number of sampled points between line endpoints
+                    mlp_hidden_dims: [256, 128, 128, 64, 32]
+                    pred_threshold: 0.95
+                    weights: /cluster/scratch/rrajaraman/3DV/glue-factory/data/weights/line_checkpoint.tar
+        checkpoint: /cluster/scratch/rrajaraman/3DV/glue-factory/data/weights/jpld_checkpoint.tar
+
+benchmarks:
+    hpatches:
+        eval:
+            estimator: homography_est
+            ransac_th: -1    # [1., 1.5, 2., 2.5, 3.]
+    megadepth1500:
+        data:
+            preprocessing:
+                side: long
+                resize: 1600
+        eval:
+            estimator: poselib
+            ransac_th: -1
+    eth3d:
+        ground_truth:
+            name: gluefactory.models.matchers.depth_matcher
+            use_lines: True
+        eval:
+            plot_methods: [ ]    # ['sp+NN', 'sp+sg', 'superpoint+lsd+gluestick']
+            plot_line_methods: [ ]    # ['superpoint+lsd+gluestick', 'sp+deeplsd+gs']
+    wireframe:
+        eval:
+            distance: orthogonal
+            distance_thresh: [1, 3, 5, 7, 100]
+            plot_images: False
+            plot_fields: False
+            plot_dir: "wireframe_plots_Ours"
+        data:
+            size: -1 # -1 for full size
+            preprocessing:
+                resize: [640,480]

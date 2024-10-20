@@ -44,7 +44,7 @@ benchmarks:
         eval:
             "distance": "orthogonal"
             "distance_thresh": [1, 3, 5, 7, 100]
-            "plot_images": False
+            "plot_images": True
         data:
             "size": -1 # -1 for full size
             "preprocessing":
