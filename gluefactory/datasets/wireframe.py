@@ -105,6 +105,7 @@ class Wireframe(BaseDataset, torch.utils.data.Dataset):
             "lines": torch.as_tensor(file["lines"]),
             "shape": torch.as_tensor(file['img'].shape),
             "line_ends": lines,
+            "H_0to1": torch.eye(4)
         }
 
     def __len__(self):

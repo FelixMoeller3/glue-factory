@@ -12,6 +12,7 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 from tqdm import tqdm
+import flow_vis
 
 from gluefactory.utils.desc_evaluation import compute_homography, compute_matching_score
 from gluefactory.utils.kp_evaluation import compute_rep_loc_H
@@ -65,6 +66,11 @@ python -m gluefactory.eval.wireframe --conf ./gluefactory/configs/superpoint+lsd
 
 """
 
+def get_flow_vis(df, ang, line_neighborhood=5):
+    norm = line_neighborhood + 1 - np.clip(df, 0, line_neighborhood)
+    flow_uv = np.stack([norm * np.cos(ang), norm * np.sin(ang)], axis=-1)
+    flow_img = flow_vis.flow_to_color(flow_uv, convert_to_bgr=False)
+    return flow_img
 
 @torch.no_grad()
 def export_predictions(
@@ -154,16 +160,24 @@ class WireframePipeline(EvalPipeline):
         "eval": {
             "distance": "orthogonal",
             "distance_thresh": [1, 3, 5, 7, 100, 150, 200, 640],
-            "plot_images": False
+            "plot_images": False,
+            "plot_fields": False,
+            "plot_dir": "wireframe_plots"
         },
     }
 
     export_keys = [
-        "keypoints0",
-        "keypoints1",
         "lines0",
         "lines1",
-        "line_ends",
+        "line_ends"
+    ]
+    optional_export_keys = [
+        "line_anglefield0",
+        "line_anglefield1",
+        "line_distancefield0",
+        "line_distancefield1",
+        "keypoints0",
+        "keypoints1"
     ]
 
     def _init(self, conf):
@@ -226,7 +240,7 @@ class WireframePipeline(EvalPipeline):
 
             # Make Plot Directory
             if conf.plot_images:
-                os.makedirs("./wireframe_plots", exist_ok=True)
+                os.makedirs(f"./{conf.plot_dir}", exist_ok=True)
 
             # Get Line Distances
             dist_name = conf.distance
@@ -240,12 +254,21 @@ class WireframePipeline(EvalPipeline):
                 raise NotImplementedError(f"{dist_name} is not an implemented Distance Measure")
             
 
-            if conf.plot_images:
-                plot_images([data['view0']['image'][0].permute(1,2,0)/data['view0']['image'].max(), data['view1']['image'][0].permute(1,2,0)/data['view1']['image'].max()], ['Pred', 'GT'])
-                plot_keypoints(kpts=[pred['keypoints0'], pred['keypoints1']])
+            if conf.plot_images and conf.plot_fields:
+                plot_images([data['view0']['image'][0].permute(1,2,0)/data['view0']['image'].max(), data['view1']['image'][0].permute(1,2,0)/data['view1']['image'].max(),
+                            get_flow_vis(pred['line_distancefield0'], pred['line_anglefield0']), pred['line_distancefield0']], ['Pred', 'GT', "AF", "DF"])
+                if "keypoints0" in pred.keys():
+                    plot_keypoints(kpts=[pred['keypoints0'], pred['keypoints1']])
                 if pred['lines0'].shape[1] > 0:
                     plot_lines(lines= [pred['lines0'], lines_gt])
-                save_plot(os.path.join('./wireframe_plots/', f'{i}.jpg'))
+                save_plot(os.path.join(f'./{conf.plot_dir}', f'{i}.jpg'))
+            elif conf.plot_images:
+                plot_images([data['view0']['image'][0].permute(1,2,0)/data['view0']['image'].max(), data['view1']['image'][0].permute(1,2,0)/data['view1']['image'].max()], ['Pred', 'GT'])
+                if "keypoints0" in pred.keys():
+                    plot_keypoints(kpts=[pred['keypoints0'], pred['keypoints1']])
+                if pred['lines0'].shape[1] > 0:
+                    plot_lines(lines= [pred['lines0'], lines_gt])
+                save_plot(os.path.join(f'./{conf.plot_dir}', f'{i}.jpg'))
 
             # Get Closest Line Distances
             best_match = line_dist.min(axis=1)
