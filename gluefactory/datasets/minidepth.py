@@ -35,7 +35,7 @@ class MiniDepthDataset(BaseDataset):
         "seed": 0,
         "num_workers": 0,  # number of workers used by the Dataloader
         "prefetch_factor": None,
-        "preprocessing": {"resize": [800, 800]},
+        "preprocessing": {},
         "load_features": {
             "do": False,
             "check_exists": True,
@@ -56,6 +56,7 @@ class MiniDepthDataset(BaseDataset):
 
     def _init(self, conf):
         # Auto-download the dataset if not existing
+        print(conf)
         if not (DATA_PATH / conf.data_dir).exists():
             logger.info("Downloading the minidepth dataset...")
             self.download_minidepth()
