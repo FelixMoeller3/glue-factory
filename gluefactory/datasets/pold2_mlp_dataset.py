@@ -15,6 +15,7 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 from tqdm import tqdm
+import enum
 
 from gluefactory.models.deeplsd_inference import DeepLSD
 from gluefactory.utils.image import load_image
@@ -25,6 +26,12 @@ from ..utils.tools import fork_rng
 from .base_dataset import BaseDataset
 
 logger = logging.getLogger(__name__)
+
+class NegativeType(enum.Enum):
+    RANDOM = "random"
+    DEEPLSD_RANDOM = "deeplsd_random"
+    DEEPLSD_NEIGHBOUR = "deeplsd_neighbour"
+    COMBINED = "combined"
 
 
 class POLD2_MLP_Dataset(BaseDataset):
@@ -43,6 +50,10 @@ class POLD2_MLP_Dataset(BaseDataset):
             "use_af": True,
             "num_images": 100,
             "num_negative_per_image": 10,
+            "negative_type": "random",  # random, deeplsd_random, deeplsd_neighbour, combined
+            "combined_ratio": 0.5,
+            "negative_neighbour_min_radius": 5,
+            "negative_neighbour_max_radius": 10,
             "num_positive_per_image": 10,  # -1 to use all
             "num_line_samples": 30,  # number of sampled points between line endpoints
             "num_bands": 1,  # number of bands to sample along the line
@@ -69,6 +80,8 @@ class POLD2_MLP_Dataset(BaseDataset):
                 "checkpoint": None,
             },
             "glob": "revisitop1m/jpg/**/base_image.jpg",  # relative to DATA_PATH
+            
+            "debug": False, # debug the data generation (visualize positive and negative samples)
         },
     }
 
@@ -114,10 +127,27 @@ class POLD2_MLP_Dataset(BaseDataset):
         )
 
     def generate_data(self, conf: OmegaConf, data_dir: Path):
+
+        # DEBUG
+        self.gen_debug = False
+        if conf.generate.debug:
+            import os
+            from gluefactory.visualization.viz2d import show_lines, show_points
+
+            self.IMAGE = None
+            self.IDX = 0
+            self.gen_debug = True
+
+            if os.path.exists("tmp_dataset_debug"):
+                shutil.rmtree("tmp_dataset_debug")
+            os.makedirs("tmp_dataset_debug")
+
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         def get_line_from_image(file_path, deeplsd_net, jpldd_net):
             img = cv2.imread(file_path)[:, :, ::-1]
+            if self.gen_debug:
+                self.IMAGE = img
             gray_img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
             inputs = {
@@ -180,10 +210,47 @@ class POLD2_MLP_Dataset(BaseDataset):
                 return af_val
             else:
                 return np.hstack([df_val, af_val])
+            
+        def generate_random_endpoints(img_shape, gen_conf):
+            # Randomly sample negative points and generate lines
+            neg_x = np.random.randint(0, img_shape[1], (2 * gen_conf.num_negative_per_image)).reshape(-1, 1)
+            neg_y = np.random.randint(0, img_shape[0], (2 * gen_conf.num_negative_per_image)).reshape(-1, 1)
+            neg_lines = np.stack([neg_x, neg_y], axis=1).reshape(-1, 2, 2)
+
+            return neg_lines
+        
+        def generate_deeplsd_random_endpoints(lines):
+            # Randomly pair up the deeplsd endpoints to generate negative samples
+            lines = lines.copy()
+            endpoints = lines.reshape(-1, 2)
+            np.random.shuffle(endpoints)
+            neg_lines = endpoints.reshape(-1, 2, 2)
+
+            return neg_lines
+        
+        def generate_deeplsd_neighbour_endpoints(lines, img_shape, gen_conf):
+            # Pairup points in the neighbourhood of the deeplsd endpoints to generate hard negative samples
+            neg_lines = []
+            min_radius = gen_conf.negative_neighbour_min_radius
+            max_radius = gen_conf.negative_neighbour_max_radius
+
+            for line in lines:
+                radius = np.random.randint(min_radius, max_radius)
+
+                p1, p2 = line
+                p1_neigh = p1 + np.random.randint(-radius, radius, 2)
+                p2_neigh = p2 + np.random.randint(-radius, radius, 2)
+                p1_neigh = np.clip(p1_neigh, 0, img_shape[::-1])
+                p2_neigh = np.clip(p2_neigh, 0, img_shape[::-1])
+                neg_lines.append(np.stack([p1_neigh, p2_neigh]))
+
+            neg_lines = np.array(neg_lines)
+
+            return neg_lines
 
         if data_dir.exists():
             if conf.generate.regenerate:
-                logger.warning("Data directory already exists. Overwriting.")
+                logger.warning(f"Data directory already exists. Overwriting {data_dir}")
                 shutil.rmtree(data_dir)
             else:
                 logger.info("Found existing data. Not regenerating")
@@ -225,10 +292,57 @@ class POLD2_MLP_Dataset(BaseDataset):
             )
 
             lines = lines.astype(int)  # convert to int for indexing
-            lines = lines[: conf.generate.num_positive_per_image]
+
+            # Postive samples
+            if gen_conf.num_positive_per_image == -1:
+                pos_idx = np.arange(len(lines))
+            else:
+                num_pos = min(gen_conf.num_positive_per_image, len(lines))
+                pos_idx = np.random.choice(len(lines), num_pos, replace=False)
+            pos_lines = lines[pos_idx]
+
+            # Negative samples
+            if gen_conf.negative_type == NegativeType.RANDOM.value:
+                neg_lines = generate_random_endpoints(img_shape, gen_conf)
+
+            elif gen_conf.negative_type == NegativeType.DEEPLSD_RANDOM.value:
+                neg_lines = generate_deeplsd_random_endpoints(lines)
+
+            elif gen_conf.negative_type == NegativeType.DEEPLSD_NEIGHBOUR.value:
+                neg_lines = generate_deeplsd_neighbour_endpoints(lines, img_shape, gen_conf)
+
+            elif gen_conf.negative_type == NegativeType.COMBINED.value:
+                neg_deeplsd_random = generate_deeplsd_random_endpoints(lines)
+                neg_deeplsd_neighbour = generate_deeplsd_neighbour_endpoints(lines, img_shape, gen_conf)
+
+                num_neg_neigh = int(gen_conf.combined_ratio * gen_conf.num_negative_per_image)
+                num_neg_rand = gen_conf.num_negative_per_image - num_neg_neigh
+
+                neigh_idx = np.random.choice(len(neg_deeplsd_neighbour), num_neg_neigh, replace=False)
+                rand_idx = np.random.choice(len(neg_deeplsd_random), num_neg_rand, replace=False)
+
+                neg_lines = np.concatenate([neg_deeplsd_neighbour[neigh_idx], neg_deeplsd_random[rand_idx]])
+
+            else:
+                raise ValueError(f"Unknown negative type: {gen_conf.negative_type}")
+            
+            num_neg = min(gen_conf.num_negative_per_image, len(neg_lines))
+            neg_idx = np.random.choice(len(neg_lines), num_neg, replace=False)
+            neg_lines = neg_lines[neg_idx]
+            
+            # DEBUG
+            if self.gen_debug:
+                dimg = show_lines(self.IMAGE[:,:,::-1], pos_lines.astype(int), color='green')
+                dimg = show_lines(dimg, neg_lines.astype(int), color='red')
+                dimg = show_points(dimg, pos_lines.reshape(-1, 2).astype(int))
+
+                global IDX
+                cv2.imwrite(f"tmp_dataset_debug/{self.IDX}.png", dimg)
+                self.IDX += 1
+
 
             # Generate positive samples
-            for line in lines:
+            for line in pos_lines:
                 positives.append(
                     datasetEntryFromPoints(
                         line[0], line[1], distance_map, angle_map, blend, img_shape
@@ -236,22 +350,10 @@ class POLD2_MLP_Dataset(BaseDataset):
                 )
 
             # Generate negative samples
-            for _ in range(conf.generate.num_negative_per_image):
-                p1 = np.array(
-                    [
-                        np.random.randint(0, img_shape[1]),
-                        np.random.randint(0, img_shape[0]),
-                    ]
-                )
-                p2 = np.array(
-                    [
-                        np.random.randint(0, img_shape[1]),
-                        np.random.randint(0, img_shape[0]),
-                    ]
-                )
+            for line in neg_lines:
                 negatives.append(
                     datasetEntryFromPoints(
-                        p1, p2, distance_map, angle_map, blend, img_shape
+                        line[0], line[1], distance_map, angle_map, blend, img_shape
                     )
                 )
 

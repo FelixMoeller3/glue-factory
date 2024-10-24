@@ -80,6 +80,22 @@ jpldd_conf = {
     #"checkpoint": "/local/home/rkreft/shared_team_folder/outputs/training/rk_pold2gt_oxparis_base_hard_gt/checkpoint_best.tar"
 }
 
+dset_conf = {
+            "reshape": [400, 400], # ex [800, 800]
+            "load_features": {
+                "do": True,
+                "check_exists": True,
+                "point_gt": {
+                    "data_keys": ["superpoint_heatmap"],
+                    "use_score_heatmap": False,
+                },
+                "line_gt": {
+                    "data_keys": ["deeplsd_distance_field", "deeplsd_angle_field"],
+                },
+            },
+            "debug": True
+        }
+
 # Plotting functions
 def show_points(image, points):
     for point in points:
@@ -88,7 +104,16 @@ def show_points(image, points):
     return image
 
 def show_lines(image, lines, color='green'):
-    cval = (0, 255, 0) if color == 'green' else (0, 0, 255)
+    if color == 'green':
+        cval = (0, 255, 0)
+    elif color == 'red':
+        cval = (0, 0, 255)
+    elif color == 'yellow':
+        cval = (0, 255, 255)
+    elif color == 'blue':
+        cval = (255, 0, 0)
+    else:
+        cval = (0, 255, 0)
     for pair_line in lines:
         cv2.line(image, pair_line[0], pair_line[1], cval, 3)
 
@@ -149,21 +174,6 @@ jpldd_model.eval()
 
 
 ## Dataset
-dset_conf = {
-            "reshape": [400, 400], # ex [800, 800]
-            "load_features": {
-                "do": True,
-                "check_exists": True,
-                "point_gt": {
-                    "data_keys": ["superpoint_heatmap"],
-                    "use_score_heatmap": False,
-                },
-                "line_gt": {
-                    "data_keys": ["deeplsd_distance_field", "deeplsd_angle_field"],
-                },
-            },
-            "debug": True
-        }
 oxpa_2 = get_dataset("oxford_paris_mini_1view_jpldd")(dset_conf)
 ds = oxpa_2.get_dataset(split="train")
 
@@ -226,12 +236,28 @@ for i in tqdm(rand_idx):
         deeplsd_lines = np.array(deeplsd_output["lines"][0]).astype(int)
         print(f"Num DeepLSD Lines: {len(deeplsd_lines)}")
 
-    c_img = show_points(c_img, points)
-    c_img = show_lines(c_img, deeplsd_lines, color='red')
-    c_img = cv2.putText(c_img, "DeepLSD", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+    d_img = c_img.copy()
+    d_img = show_points(d_img, points)
+    d_img = show_lines(d_img, deeplsd_lines, color='red')
+    d_img = cv2.putText(d_img, "DeepLSD", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+
+    # Use LSD on top of JPLDD DF and AF
+    lsd_lines = []
+    np_img = (inputs["image"].cpu().numpy()[:, 0] * 255).astype(np.uint8)
+    np_df = output_model["line_distancefield"].cpu().numpy()
+    np_ll = output_model["line_anglefield"].cpu().numpy()
+    for im, df, ll in zip(np_img, np_df, np_ll):
+        line = deeplsd_net.detect_afm_lines(
+            im, df, ll, **deeplsd_conf.line_detection_params
+        )
+        lsd_lines.append(line.astype(int))
+    l_img = c_img.copy()
+    l_img = show_points(l_img, points)
+    l_img = show_lines(l_img, lsd_lines[0], color='yellow')
+    l_img = cv2.putText(l_img, "JPLDD + LSD", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
 
     # Concatenate both images
-    img = np.concatenate([img, c_img], axis=1)
+    img = np.concatenate([img, d_img, l_img], axis=1)
 
     cv2.imwrite(f'{DEBUG_DIR}/{IDX}_lines.png', img)
 
