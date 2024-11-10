@@ -4,6 +4,7 @@ from pprint import pprint
 
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 import torch
 from omegaconf import OmegaConf
 import torch.utils
@@ -15,6 +16,13 @@ from gluefactory.models.utils.metrics_lines import (
     compute_repeatability,
 )
 import os
+
+from gluefactory.visualization.viz2d import (
+    plot_images,
+    plot_keypoints,
+    plot_lines,
+    save_plot,
+)
 
 from gluefactory.datasets import get_dataset
 from gluefactory.models.cache_loader import CacheLoader
@@ -34,7 +42,7 @@ class HPatchesPipeline(EvalPipeline):
             "name": "hpatches",
             "num_workers": 2,
             "preprocessing": {
-                "resize": 480,  # we also resize during eval to have comparable metrics
+                "resize": 800,  # we also resize during eval to have comparable metrics
                 "side": "short",
             },
         },
@@ -86,6 +94,8 @@ class HPatchesPipeline(EvalPipeline):
                 "line_matches1",
                 "line_matching_scores0",
                 "line_matching_scores1",
+                "orig_lines0",
+                "orig_lines1"
             ]
 
     @classmethod
@@ -167,6 +177,13 @@ class HPatchesPipeline(EvalPipeline):
                     pred["line_matching_scores0"].cpu(), self.conf.num_lines_th
                 )
                 results_i["num_lines"] = (lines0.shape[0] + lines1.shape[0]) / 2
+
+            # if line_rep[0] == 0:
+            #     print("Rep 0")
+            # plot_images([data['view0']['image'].permute(1,2,0), data['view1']['image'].permute(1,2,0)], ['H0', 'H1'])
+            # # plot_keypoints(kpts=[pred['keypoints0'], pred['keypoints1']])
+            # plot_lines(lines= [pred['orig_lines0'], pred['orig_lines0']])
+            # save_plot(os.path.join('./match_score/', f'{i}.jpg'))
 
             for k, v in results_i.items():
                 results[k].append(v)
