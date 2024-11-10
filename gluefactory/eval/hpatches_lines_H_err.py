@@ -29,10 +29,12 @@ from gluefactory.models.cache_loader import CacheLoader
 from gluefactory.settings import EVAL_PATH
 from gluefactory.utils.export_predictions import export_predictions
 from gluefactory.utils.tensor import map_tensor
+from gluefactory.datasets.homographies_deeplsd import warp_lines
 from gluefactory.eval.eval_pipeline import EvalPipeline,exists_eval,save_eval,load_eval
 from gluefactory.visualization.viz2d import plot_images, plot_lines, save_plot
 from gluefactory.eval.io import get_eval_parser, load_model, parse_eval_args
 from gluefactory.models import BaseModel
+from gluefactory.models.lines.line_utils import H_estimation
 
 
 class HPatchesPipeline(EvalPipeline):
@@ -57,8 +59,7 @@ class HPatchesPipeline(EvalPipeline):
         },
         "use_points": False,
         "use_lines": True,
-        "repeatability_th": [1, 3, 5],
-        "num_lines_th": [10, 50, 300],
+        "H_err_thresh": [1, 3, 5],
     }
     export_keys = []
 
@@ -92,8 +93,6 @@ class HPatchesPipeline(EvalPipeline):
                 "lines1",
                 "line_matches0",
                 "line_matches1",
-                "line_matching_scores0",
-                "line_matching_scores1",
                 "orig_lines0",
                 "orig_lines1"
             ]
@@ -148,42 +147,24 @@ class HPatchesPipeline(EvalPipeline):
             data = map_tensor(data, lambda t: torch.squeeze(t, dim=0))
             # add custom evaluations here
 
+            segs1, segs2, matched_idx1, matched_idx2 = pred["lines0"], pred["lines1"], pred["line_matches0"].to(torch.int64), pred["line_matches1"].to(torch.int64)
+
             results_i = {}
 
             # we also store the names for later reference
             results_i["names"] = data["name"][0]
             results_i["scenes"] = data["scene"][0]
+            H = data["H_0to1"][0].cpu().numpy()
 
-            if "lines0" in pred:
-                lines0 = pred["lines0"].cpu()
-                lines1 = pred["lines1"].cpu()
-
-                if plot:
-                    plot_images([data['view0']['image'].permute(1,2,0), data['view1']['image'].permute(1,2,0)], ['H0', 'H1'])
-                    plot_lines(lines= [pred['orig_lines0'], pred['orig_lines1']])
-                    save_plot(os.path.join('./match_score/', f'{i}.jpg'))
-                    plt.close()
-
-                results_i["repeatability"] = compute_repeatability(
-                    lines0,
-                    lines1,
-                    pred["line_matches0"].cpu(),
-                    pred["line_matches1"].cpu(),
-                    pred["line_matching_scores0"].cpu(),
-                    self.conf.repeatability_th,
-                    rep_type="num",
-                )
-                results_i["loc_error"] = compute_loc_error(
-                    pred["line_matching_scores0"].cpu(), self.conf.num_lines_th
-                )
-                results_i["num_lines"] = (lines0.shape[0] + lines1.shape[0]) / 2
-
-            # if line_rep[0] == 0:
-            #     print("Rep 0")
-            # plot_images([data['view0']['image'].permute(1,2,0), data['view1']['image'].permute(1,2,0)], ['H0', 'H1'])
-            # # plot_keypoints(kpts=[pred['keypoints0'], pred['keypoints1']])
-            # plot_lines(lines= [pred['orig_lines0'], pred['orig_lines0']])
-            # save_plot(os.path.join('./match_score/', f'{i}.jpg'))
+            for thresh in [1,3,5]:
+                if len(matched_idx1) < 3:
+                    results_i[f"H_err@{thresh}"] = 0
+                else:
+                    matched_seg1 = segs1[matched_idx1].cpu().numpy()
+                    matched_seg2 = warp_lines(segs2.cpu().numpy(), H)[matched_idx2]
+                    score = H_estimation(matched_seg1, matched_seg2, H,
+                                        data["view0"]["image"][0].shape[1:].cpu().numpy(), reproj_thresh=thresh)[0]
+                    results_i[f"H_err@{thresh}"] = score
 
             for k, v in results_i.items():
                 results[k].append(v)
@@ -197,14 +178,10 @@ class HPatchesPipeline(EvalPipeline):
                 continue
             summaries[f"m{k}"] = round(np.median(arr), 3)
 
-        if "repeatability" in results.keys():
-            for i, th in enumerate(self.conf.repeatability_th):
-                cur_nums = list(map(lambda x: x[i], results["repeatability"]))
+        if "H_err@1" in results.keys():
+            for i, th in enumerate([1,3,5]):
+                cur_nums = list(map(lambda x: x[i], results[f"H_err_{th}"]))
                 summaries[f"repeatability@{th}px"] = round(np.median(cur_nums), 3)
-        if "loc_error" in results.keys():
-            for i, th in enumerate(self.conf.num_lines_th):
-                cur_nums = list(map(lambda x: x[i], results["loc_error"]))
-                summaries[f"loc_error@{th}lines"] = round(np.median(cur_nums), 3)
 
         figures = {}
 

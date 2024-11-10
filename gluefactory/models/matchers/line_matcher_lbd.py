@@ -2,11 +2,11 @@ import numpy as np
 import torch
 import pyelsed
 
-from gluefactory.models.utils.metrics_lines import match_segments_1_to_1
+from gluefactory.models.utils.metrics_lines import match_segments_1_to_1, match_segments_lbd
 from ..base_model import BaseModel
 
 
-class LineMatcher(BaseModel):
+class LineMatcher_LBD(BaseModel):
     default_conf = {
         "line_dist": "orth",
         "ELSED": False,
@@ -47,23 +47,37 @@ class LineMatcher(BaseModel):
             lines0 = data["lines0"][0][:, :, [1, 0]].cpu()
             lines1 = data["lines1"][0][:, :, [1, 0]].cpu()
 
-        lines0 = lines0[
-            torch.linalg.norm(lines0[:, 1] - lines0[:, 0], axis=1) > self.conf.min_length
-        ]
-        lines1 = lines1[
-            torch.linalg.norm(lines1[:, 1] - lines1[:, 0], axis=1) > self.conf.min_length
-        ]
-        # The data elements come in lists and therefore they are unpacked
-        segs1, segs2, matched_idx1, matched_idx2, distances = match_segments_1_to_1(
-            lines0,
-            lines1,
-            data["H_0to1"][0].cpu(),
-            img_size,
-            self.conf.line_dist,
-            self.conf.angular_th,
-            self.conf.overlap_th,
-            self.conf.dist_thresh,
-        )
+        rgb = (data["view0"]["image"][0]*255).to(torch.int32)
+        r, g, b = rgb[0,:,:], rgb[1,:,:], rgb[2,:,:]
+
+        gray = 0.2989 * r + 0.5870 * g + 0.1140 * b
+
+        # print(type(gray.cpu().numpy().astype(np.uint16)))
+        # print(gray.cpu().numpy().astype(np.uint16).dtype)
+
+        segs1, segs2, matched_idx1, matched_idx2 = match_segments_lbd(
+        gray.cpu().numpy().astype(np.uint8), lines0.numpy(), lines1.numpy(), data["H_0to1"][0].cpu().numpy(), 
+        gray.shape)
+        # print(len(segs1))
+        # print(len(lines0))
+
+        # lines0 = lines0[
+        #     torch.linalg.norm(lines0[:, 1] - lines0[:, 0], axis=1) > self.conf.min_length
+        # ]
+        # lines1 = lines1[
+        #     torch.linalg.norm(lines1[:, 1] - lines1[:, 0], axis=1) > self.conf.min_length
+        # ]
+        # # The data elements come in lists and therefore they are unpacked
+        # segs1, segs2, matched_idx1, matched_idx2, distances = match_segments_1_to_1(
+        #     lines0,
+        #     lines1,
+        #     data["H_0to1"][0].cpu(),
+        #     img_size,
+        #     self.conf.line_dist,
+        #     self.conf.angular_th,
+        #     self.conf.overlap_th,
+        #     self.conf.dist_thresh,
+        # )
         result["orig_lines0"] = lines0[:, :, [1, 0]].unsqueeze(0).to(device)
         result["orig_lines1"] = lines1[:, :, [1, 0]].unsqueeze(0).to(device)
 
@@ -72,12 +86,12 @@ class LineMatcher(BaseModel):
         result["line_matches0"] = torch.Tensor(matched_idx1).unsqueeze(0).to(device)
         result["line_matches1"] = torch.Tensor(matched_idx2).unsqueeze(0).to(device)
 
-        result["line_matching_scores0"] = (
-            torch.Tensor(distances).unsqueeze(0).to(device)
-        )
-        result["line_matching_scores1"] = (
-            torch.Tensor(distances).unsqueeze(0).to(device)
-        )
+        # result["line_matching_scores0"] = (
+        #     torch.Tensor(distances).unsqueeze(0).to(device)
+        # )
+        # result["line_matching_scores1"] = (
+        #     torch.Tensor(distances).unsqueeze(0).to(device)
+        # )
         return result
 
     def loss(self, pred, data):

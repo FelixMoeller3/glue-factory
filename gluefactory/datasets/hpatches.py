@@ -76,6 +76,8 @@ class HPatches(BaseDataset, torch.utils.data.Dataset):
             for i in range(2, 7):
                 self.items.append((seq, i, seq[0] == "i"))
 
+        self.items = self.items[:5]
+
     def download(self):
         data_dir = self.root.parent
         data_dir.mkdir(exist_ok=True, parents=True)

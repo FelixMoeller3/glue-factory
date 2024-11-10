@@ -6,9 +6,9 @@ model:
             detect_lines: True
 
     matcher:
-        name: matchers.line_matcher
+        name: matchers.line_matcher_lbd
         line_dist: orth
-        ELSED: True
+        ELSED: False
 benchmarks:
     megadepth1500:
         data:
