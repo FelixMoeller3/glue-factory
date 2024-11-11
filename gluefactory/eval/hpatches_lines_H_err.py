@@ -44,7 +44,7 @@ class HPatchesPipeline(EvalPipeline):
             "name": "hpatches",
             "num_workers": 2,
             "preprocessing": {
-                "resize": 800,  # we also resize during eval to have comparable metrics
+                "resize": 480,  # we also resize during eval to have comparable metrics
                 "side": "short",
             },
         },
@@ -148,13 +148,12 @@ class HPatchesPipeline(EvalPipeline):
             # add custom evaluations here
 
             segs1, segs2, matched_idx1, matched_idx2 = pred["lines0"], pred["lines1"], pred["line_matches0"].to(torch.int64), pred["line_matches1"].to(torch.int64)
-
             results_i = {}
 
             # we also store the names for later reference
             results_i["names"] = data["name"][0]
             results_i["scenes"] = data["scene"][0]
-            H = data["H_0to1"][0].cpu().numpy()
+            H = data["H_0to1"].cpu().numpy()
 
             for thresh in [1,3,5]:
                 if len(matched_idx1) < 3:
@@ -163,8 +162,8 @@ class HPatchesPipeline(EvalPipeline):
                     matched_seg1 = segs1[matched_idx1].cpu().numpy()
                     matched_seg2 = warp_lines(segs2.cpu().numpy(), H)[matched_idx2]
                     score = H_estimation(matched_seg1, matched_seg2, H,
-                                        data["view0"]["image"][0].shape[1:].cpu().numpy(), reproj_thresh=thresh)[0]
-                    results_i[f"H_err@{thresh}"] = score
+                                        data["view0"]["image"].shape[1:], reproj_thresh=thresh)[0]
+                    results_i[f"H_err@{thresh}"] = score*1
 
             for k, v in results_i.items():
                 results[k].append(v)
@@ -176,12 +175,7 @@ class HPatchesPipeline(EvalPipeline):
             arr = np.array(v)
             if not np.issubdtype(np.array(v).dtype, np.number):
                 continue
-            summaries[f"m{k}"] = round(np.median(arr), 3)
-
-        if "H_err@1" in results.keys():
-            for i, th in enumerate([1,3,5]):
-                cur_nums = list(map(lambda x: x[i], results[f"H_err_{th}"]))
-                summaries[f"repeatability@{th}px"] = round(np.median(cur_nums), 3)
+            summaries[f"m{k}"] = round(np.mean(arr), 3)
 
         figures = {}
 

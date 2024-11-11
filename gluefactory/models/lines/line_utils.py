@@ -140,15 +140,24 @@ def project_point_to_line(line_segs, points):
     as well as the list of orthogonal distances."""
     # Compute the 1D coordinate of the points projected on the line
     dir_vec = (line_segs[:, 1] - line_segs[:, 0])[:, None]
-    coords1d = (
-        torch.sum((points[None] - line_segs[:, None, 0]) * dir_vec, dim=2)
-        / torch.norm(dir_vec.float(), dim=2) ** 2
-    )
+    if isinstance(line_segs, np.ndarray):
+        coords1d = (
+        np.sum((points[None] - line_segs[:, None, 0]) * dir_vec, axis=2)
+        / np.linalg.norm(dir_vec.astype(np.float32), axis=2) ** 2
+        )
+    else:
+        coords1d = (
+            torch.sum((points[None] - line_segs[:, None, 0]) * dir_vec, dim=2)
+            / torch.norm(dir_vec.float(), dim=2) ** 2
+        )
     # coords1d is of shape (n_lines, n_points)
 
     # Compute the orthogonal distance of the points to each line
     projection = line_segs[:, None, 0] + coords1d[:, :, None] * dir_vec
-    dist_to_line = torch.norm(projection - points[None], dim=2)
+    if isinstance(line_segs, np.ndarray):
+        dist_to_line = np.linalg.norm(projection - points[None], axis=2)
+    else:
+        dist_to_line = torch.norm(projection - points[None], dim=2)
 
     return coords1d, dist_to_line
 
@@ -156,15 +165,28 @@ def project_point_to_line(line_segs, points):
 def get_segment_overlap(seg_coord1d):
     """Given a list of segments parameterized by the 1D coordinate
     of the endpoints, compute the overlap with the segment [0, 1]."""
-    seg_coord1d, _ = torch.sort(seg_coord1d, dim=-1)
-    overlap = (
-        (seg_coord1d[..., 1] > 0)
-        * (seg_coord1d[..., 0] < 1)
-        * (
-            torch.minimum(seg_coord1d[..., 1], torch.tensor(1))
-            - torch.maximum(seg_coord1d[..., 0], torch.tensor(0))
+
+    if isinstance(seg_coord1d, np.ndarray):
+
+        seg_coord1d = np.sort(seg_coord1d, axis=-1)
+        overlap = (
+            (seg_coord1d[..., 1] > 0)
+            * (seg_coord1d[..., 0] < 1)
+            * (
+                np.minimum(seg_coord1d[..., 1], 1)
+                - np.maximum(seg_coord1d[..., 0], 0)
+            )
         )
-    )
+    else:
+        seg_coord1d, _ = torch.sort(seg_coord1d, dim=-1)
+        overlap = (
+            (seg_coord1d[..., 1] > 0)
+            * (seg_coord1d[..., 0] < 1)
+            * (
+                torch.minimum(seg_coord1d[..., 1], torch.tensor(1))
+                - torch.maximum(seg_coord1d[..., 0], torch.tensor(0))
+            )
+        )
 
     return overlap
 
@@ -195,7 +217,10 @@ def get_orth_line_dist(
     coords_1_on_2 = coords_1_on_2.reshape(n_lines2, n_lines1, 2)
     overlaps2 = get_segment_overlap(coords_1_on_2).T
     overlaps = (overlaps1 + overlaps2) / 2
-    min_overlaps = torch.minimum(overlaps1, overlaps2)
+    if isinstance(overlaps1, np.ndarray):
+        min_overlaps = np.minimum(overlaps1, overlaps2)
+    else:
+        min_overlaps = torch.minimum(overlaps1, overlaps2)
 
     if return_overlap:
         return line_dists, overlaps
@@ -205,7 +230,12 @@ def get_orth_line_dist(
         low_overlaps = overlaps < min_overlap
     else:
         low_overlaps = min_overlaps < min_overlap
-    line_dists[low_overlaps] = torch.amax(line_dists)
+
+    if isinstance(line_dists, np.ndarray):
+        line_dists[low_overlaps] = np.amax(line_dists)
+    else:
+        line_dists[low_overlaps] = torch.amax(line_dists)
+
     return line_dists
 
 
@@ -596,7 +626,7 @@ def H_estimation(line_seg1, line_seg2, H_gt, img_size,
     # Estimate the homography
     H, inliers, reproj_error = estimate_homography(line_seg1, line_seg2,
                                                    tol_px)
-
+    
     # Compute the homography estimation error
     corners = np.array([[0, 0],
                         [0, img_size[1] - 1],
