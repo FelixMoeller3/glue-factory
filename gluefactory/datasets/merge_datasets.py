@@ -63,7 +63,6 @@ class _Dataset(torch.utils.data.Dataset):
         super().__init__()
         self.conf = conf
         # load datasets, set split
-        #self.set_split_for_all_datasets(split)
         self.datasets = {}  # store dataset objects
         self.img_index_collection = []  # store image indices
         if self.conf.use_multiscale_learning:
@@ -75,14 +74,15 @@ class _Dataset(torch.utils.data.Dataset):
         logging.info(f"Initialize Merged Dataset with following datasets: {conf['datasets'].keys()}")
         for key, dset_conf in conf["datasets"].items():
             # 1st check if mulitscale learning scale selection is random for all
-            scale_selection = dset_conf['multiscale_learning']['scale_selection']
-            assert scale_selection == 'random'
-            # 2nd set batch size of sub datasets to overall batch size so that sub datasets don't change scale mid loading
-            if OmegaConf.is_readonly(dset_conf):
-                OmegaConf.set_readonly(dset_conf, False)
-            OmegaConf.update(dset_conf, f'{split}_batch_size', self.relevant_batch_size, force_add=True)
-            OmegaConf.set_readonly(dset_conf, True)
-            assert dset_conf[f'{split}_batch_size'] == self.relevant_batch_size
+            if self.conf.use_multiscale_learning:
+                scale_selection = dset_conf['multiscale_learning']['scale_selection']
+                assert scale_selection == 'random'
+                # 2nd set batch size of sub datasets to overall batch size so that sub datasets don't change scale mid loading
+                if OmegaConf.is_readonly(dset_conf):
+                    OmegaConf.set_readonly(dset_conf, False)
+                OmegaConf.update(dset_conf, f'{split}_batch_size', self.relevant_batch_size, force_add=True)
+                OmegaConf.set_readonly(dset_conf, True)
+                assert dset_conf[f'{split}_batch_size'] == self.relevant_batch_size
             # Now initialize
             dset = get_dataset(dset_conf.name)(dset_conf)
             dset_initialized = dset.get_dataset(split)
