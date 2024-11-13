@@ -155,12 +155,24 @@ harris_conf = {
 }
 harris_conf = OmegaConf.create(harris_conf)
 
+shi_tomasi_conf = {
+    "maxCorners": 1000,
+    "qualityLevel": 0.01,
+    "minDistance": 10,
+    "blockSize": 3,
+    "useHarrisDetector": False,
+    "k": 0.04
+}
+shi_tomasi_conf = OmegaConf.create(shi_tomasi_conf)
+
+
 visualizations = {
     "jpldd_fields": False,
     "jpldd_lines": True,
     "deeplsd": True,
     "pold2+deeplsd": False,
-    "pold2+harris": False,
+    "pold2+harris": True,
+    "pold2+shi": True,
     "jpldd+lsd": False
 }
 
@@ -224,13 +236,38 @@ def visualize_img_and_pred(keypoints, heatmap, distance_field, angle_field, img)
 
 def detect_harris_corners(image, conf):
     gray = np.float32(image)
-    dst = cv2.cornerHarris(gray, conf.blockSize, conf.ksize, conf.k)
-    dst = cv2.dilate(dst, None)
+    dst_o = cv2.cornerHarris(gray, conf.blockSize, conf.ksize, conf.k)
+    dst = cv2.dilate(dst_o.copy(), None)
     _, dst = cv2.threshold(dst, conf.thresh * dst.max(), 255, 0)
     dst = np.uint8(dst)
     _, _, _, centroids = cv2.connectedComponentsWithStats(dst)
     criteria = (eval(conf.criteria.type), conf.criteria.maxCount, conf.criteria.epsilon)
     corners = cv2.cornerSubPix(gray, np.float32(centroids), (conf.winSize, conf.winSize), (conf.zeroZone, conf.zeroZone), criteria)
+
+    # Sort corners by score
+    scores = [dst_o[int(c[1]), int(c[0])] for c in corners]
+    sort_idx = np.argsort(scores)[::-1]
+    corners = corners[sort_idx]
+
+    return corners
+
+def detect_shi_tomasi_corners(image, conf):
+    gray = np.float32(image)
+    corners, quality = cv2.goodFeaturesToTrackWithQuality(
+        gray,
+        maxCorners=conf.maxCorners,
+        qualityLevel=conf.qualityLevel,
+        minDistance=conf.minDistance,
+        mask=None,
+        blockSize=conf.blockSize,
+        useHarrisDetector=conf.useHarrisDetector,
+        k=conf.k
+    )
+    
+    # Sort corners by quality
+    sort_idx = np.argsort(quality.flatten())[::-1]
+    corners = corners[sort_idx]
+    corners = np.squeeze(corners, axis=1)
 
     return corners
 
@@ -420,6 +457,33 @@ for i in tqdm(rand_idx):
 
         viz_img = np.concatenate([viz_img, h_img], axis=1)
         print("--------------POLD2+HARRIS OVER--------------")
+
+    # Use Pold2 Line Extractor on SHI TOMASI corners
+    if visualizations["pold2+shi"]:
+        shi_points = detect_shi_tomasi_corners(gray_img, shi_tomasi_conf)
+        spoints = torch.from_numpy(shi_points).float().to(device)
+        line_extractor_input = {
+            # "points": torch.cat(
+            #     [torch.from_numpy(points).float().to(device), spoints], dim=0
+            # ),
+            "points": spoints,
+            "distance_map": output_model["line_distancefield"][0].clone(),
+            "angle_map": output_model["line_anglefield"][0].clone(),
+            # "descriptors": torch.zeros(spoints.shape[0] + points.shape[0], 128).to(device),
+            "descriptors": torch.zeros(spoints.shape[0], 128).to(device),
+        }
+        pold2_lines = line_extractor(line_extractor_input)["lines"].cpu()
+        pold2_lines = np.array(pold2_lines).astype(int)
+        print(f"Num Shitomasi Lines: {len(pold2_lines)}")
+
+        s_img = c_img.copy()
+        s_img = show_points(s_img, shi_points.astype(int))
+        s_img = show_lines(s_img, pold2_lines)
+        s_img = cv2.copyMakeBorder(s_img, 50, 0, 0, 0, cv2.BORDER_CONSTANT, value=(128, 128, 128))
+        s_img = cv2.putText(s_img, f"Pold2 + ShiTomasi + JPLDD Points: {len(pold2_lines)}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+
+        viz_img = np.concatenate([viz_img, s_img], axis=1)
+        print("--------------POLD2+SHITOMASI OVER--------------")
 
     # Use LSD on top of JPLDD DF and AF
     if visualizations["jpldd+lsd"]:
