@@ -323,12 +323,25 @@ for i in tqdm(rand_idx):
         viz_img = np.concatenate([viz_img, img], axis=1)
 
         df = output_model["line_distancefield"][0].cpu().numpy()
+        binary_df = ((df / jpldd_conf["line_detection"]["conf"]["distance_map"]["max_value"]) > jpldd_conf["line_detection"]["conf"]["brute_force_df"]["binary_threshold"]).astype(np.uint8)
+
         df = (df / np.max(df) * 255).astype(np.uint8)
         df = cv2.applyColorMap(df, cv2.COLORMAP_JET)
         df = cv2.copyMakeBorder(df, 50, 0, 0, 0, cv2.BORDER_CONSTANT, value=(128, 128, 128))
         df = cv2.putText(df, "JPLDD Distance Field", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
 
-        viz_img = np.concatenate([df, viz_img], axis=1)
+        bdf = binary_df * 255
+        bdf = cv2.applyColorMap(bdf, cv2.COLORMAP_JET)
+        bdf = show_points(bdf, points, color='green')
+        bdf = cv2.copyMakeBorder(bdf, 50, 0, 0, 0, cv2.BORDER_CONSTANT, value=(128, 128, 128))
+        bdf = cv2.putText(bdf, "JPLDD Binary Distance Field", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+
+        af = output_model["line_anglefield"][0].cpu().numpy()
+        af = get_flow_vis(output_model["line_distancefield"][0].cpu().numpy(), af)
+        af = cv2.copyMakeBorder(af, 50, 0, 0, 0, cv2.BORDER_CONSTANT, value=(128, 128, 128))
+        af = cv2.putText(af, "JPLDD Angle Field", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+
+        viz_img = np.concatenate([af, df, bdf, viz_img], axis=1)
         print("--------------JPLDD OVER--------------")
 
     # Calculate DeepLSD Lines
