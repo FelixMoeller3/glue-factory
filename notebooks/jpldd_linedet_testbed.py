@@ -28,7 +28,7 @@ DEBUG_DIR = "tmp_testbed"
 deeplsd_conf = {
     "detect_lines": True,
     "line_detection_params": {
-        "merge": True,
+        "merge": False,
         "filtering": True,
         "grad_thresh": 3,
         "grad_nfa": True,
@@ -48,6 +48,8 @@ jpldd_conf = {
             "max_point_size": 1500,
             "min_line_length": 6,
             "max_line_length": None,
+            "max_lines": 2000,
+
             "samples": [24],
 
             "distance_map": {
@@ -58,7 +60,7 @@ jpldd_conf = {
                 "avg_filter_padding": 6,
                 "avg_filter_stride": 1,
                 "inlier_ratio": 0.7,
-                "max_accepted_mean_value": 0.5,
+                "max_accepted_mean_value": 0.4,
             },
 
             "brute_force_df": {
@@ -163,9 +165,19 @@ visualizations = {
 }
 
 # Plotting functions
-def show_points(image, points):
+def show_points(image, points, color='blue'):
+    if color == 'green':
+        cval = (0, 255, 0)
+    elif color == 'red':
+        cval = (0, 0, 255)
+    elif color == 'yellow':
+        cval = (0, 255, 255)
+    elif color == 'blue':
+        cval = (255, 0, 0)
+    else:
+        cval = (0, 255, 0)
     for point in points:
-        cv2.circle(image, (point[0], point[1]), 4, (191, 69, 17), -1)
+        cv2.circle(image, (point[0], point[1]), 4, cval, -1)
 
     return image
 
