@@ -1,13 +1,18 @@
 model:
-  name: joint_point_line_extractor
-  training:
-    do: False
-  max_num_keypoints: 1024  # setting for training for eval: -1
-  timeit: True  # override timeit: False from BaseModel
-  # use_deeplsd_endpoints: true
-  line_df_decoder_channels: 32
-  line_af_decoder_channels: 32
-  line_detection:
+    name: extractors.joint_point_line_extractor
+    aliked_model_name: "aliked-n16"
+    max_num_keypoints: 2048  # setting for training, for eval: -1
+    detection_threshold: 0.0
+    # use_deeplsd_endpoints: true
+    line_df_decoder_channels: 32  # adapt to your checkpoint!!
+    line_af_decoder_channels: 32
+    use_line_anglefield: True  # ~ 7ms difference
+    nms_radius: 3
+    training:
+      do: False
+    checkpoint: /local/home/Point-Line/outputs/training/oxparis_800_focal/checkpoint_best.tar
+    timeit: True  # setting it to True -> gives 4-5 fps less performance
+    line_detection:
       do: True
       conf:
           max_point_size: 1500
@@ -41,9 +46,10 @@ model:
 
 
           mlp_conf:
+              name: gluefactory.models.lines.pold2_mlp
               has_angle_field: True
-              has_distance_field: True 
-              
+              has_distance_field: True
+
               num_line_samples: 30    # number of sampled points between line endpoints
               brute_force_samples: False  # sample all points between line endpoints
               image_size: null         # size of the input image relevant only if brute_force_samples is True
@@ -60,16 +66,16 @@ model:
                   kernel_size: 3
                   stride: 1
                   padding: same
-                  channels: [4, 8, 16]  # number of channels in each layer     
+                  channels: [4, 8, 16]  # number of channels in each layer
 
               cnn_2d:             # 2D CNN to extract features from the input
                   use: false
                   kernel_size: 3
                   stride: 1
                   padding: same
-                  channels: [4, 8, 16]  # number of channels in each layer    
+                  channels: [4, 8, 16]  # number of channels in each layer
 
-              pred_threshold: 0.8        
+              pred_threshold: 0.8
               weights: /local/home/Point-Line/outputs/training/pold2_cnn1d_NS-30_NB-3_disjoint/checkpoint_best.tar
 
           filters:

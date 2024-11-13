@@ -25,7 +25,6 @@ from gluefactory.models import get_model
 from gluefactory.models.base_model import BaseModel
 from gluefactory.models.lines.line_refinement import merge_lines_torch
 from gluefactory.models.lines.pold2_mlp import POLD2_MLP
-from gluefactory.models.lines.pold2_cnn import POLD2_CNN
 from gluefactory.settings import DATA_PATH
 
 logger = logging.getLogger(__name__)
@@ -408,7 +407,6 @@ class LineExtractor(BaseModel):
 
         # Finally we can filter the indices
         return indices[detected_line_indices]
-        return indices[detected_line_indices & detected_line_float]
 
 
     def filter_with_angle_field(self, points: torch.Tensor, angle_map: torch.Tensor, indices: torch.Tensor, sample_idx: int) -> torch.Tensor:
@@ -633,7 +631,7 @@ class LineExtractor(BaseModel):
         descriptors = data["descriptors"]
 
         # Convert angle map (direction vector) to angle (radians from 0 to pi) but only if loading ground truth!
-        if angle_map.ndim > 2:
+        if angle_map is not None and angle_map.ndim > 2:
             angle_map = torch.atan2(angle_map[1], angle_map[0]) % torch.pi
 
         # Get indices
