@@ -402,7 +402,7 @@ for i in tqdm(rand_idx):
         d_img = show_points(d_img, points)
         d_img = show_lines(d_img, deeplsd_lines, color='red')
         d_img = cv2.copyMakeBorder(d_img, 50, 0, 0, 0, cv2.BORDER_CONSTANT, value=(128, 128, 128))
-        d_img = cv2.putText(d_img, "DeepLSD", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+        d_img = cv2.putText(d_img, f"DeepLSD: {len(deeplsd_lines)}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
 
         viz_img = np.concatenate([viz_img, d_img], axis=1)
         print("--------------DEELSD OVER--------------")
@@ -433,17 +433,13 @@ for i in tqdm(rand_idx):
         hpoints = torch.from_numpy(harris_points).float().to(device)
         line_extractor_input = {
             # "points": torch.cat(
-            #     [hpoints, torch.from_numpy(dpoints).float().to(device)], dim=0
+            #     [torch.from_numpy(points).float().to(device), hpoints], dim=0
             # ),
-            "points": torch.cat(
-                [hpoints, torch.from_numpy(points).float().to(device)], dim=0
-            ),
-            # "points": hpoints,
+            "points": hpoints,
             "distance_map": output_model["line_distancefield"][0].clone(),
             "angle_map": output_model["line_anglefield"][0].clone(),
-            # "descriptors": torch.zeros(hpoints.shape[0] + dpoints.shape[0], 128).to(device),
-            "descriptors": torch.zeros(hpoints.shape[0] + points.shape[0], 128).to(device),
-            # "descriptors": torch.zeros(hpoints.shape[0], 128).to(device),
+            # "descriptors": torch.zeros(hpoints.shape[0] + points.shape[0], 128).to(device),
+            "descriptors": torch.zeros(hpoints.shape[0], 128).to(device),
         }
         pold2_lines = line_extractor(line_extractor_input)["lines"].cpu()
         pold2_lines = np.array(pold2_lines).astype(int)
@@ -453,7 +449,7 @@ for i in tqdm(rand_idx):
         h_img = show_points(h_img, harris_points.astype(int))
         h_img = show_lines(h_img, pold2_lines)
         h_img = cv2.copyMakeBorder(h_img, 50, 0, 0, 0, cv2.BORDER_CONSTANT, value=(128, 128, 128))
-        h_img = cv2.putText(h_img, "Pold2 + Harris + JPLDD Points", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+        h_img = cv2.putText(h_img, f"Pold2 + Harris + JPLDD Points: {len(pold2_lines)}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
 
         viz_img = np.concatenate([viz_img, h_img], axis=1)
         print("--------------POLD2+HARRIS OVER--------------")
