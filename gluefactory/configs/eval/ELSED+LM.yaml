@@ -28,3 +28,10 @@ benchmarks:
                 max_num_keypoints: 512  # overwrite config above
         use_points: False
         use_lines: True
+    rdnim_lines:
+        data:
+            preprocessing:
+                resize: 800
+                side: long
+        use_points: False
+        use_lines: True

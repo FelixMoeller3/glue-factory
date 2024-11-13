@@ -1,12 +1,9 @@
 model:
     name: two_view_pipeline
     extractor:
-        name: lines.deeplsd
+        name: lines.lsd
         model_conf:
-            detect_lines: True
             max_num_lines: 2000
-            line_detection_params:
-                merge: False
 
     matcher:
         name: matchers.line_matcher
