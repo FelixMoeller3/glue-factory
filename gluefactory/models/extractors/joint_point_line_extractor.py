@@ -320,6 +320,8 @@ class JointPointLineDetectorDescriptor(BaseModel):
         keypoint_and_junction_score_map = padder.unpad(
             score_map_padded
         )  # B x 1 x H x W
+        if 'mask' in data:
+            keypoint_and_junction_score_map *= data['mask'].float()
 
         # For storing, remove additional dimension but keep batch dimension even if its 1
         # but keep additional dimension for variable -> needed by dkd
