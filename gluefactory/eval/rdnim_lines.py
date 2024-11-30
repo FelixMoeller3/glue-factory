@@ -8,6 +8,7 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 from tqdm import tqdm
+import os
 
 from gluefactory.models.utils.metrics_lines import (
     compute_loc_error,
@@ -21,6 +22,7 @@ from gluefactory.utils.export_predictions import export_predictions
 from gluefactory.utils.tensor import map_tensor
 from gluefactory.eval.eval_pipeline import EvalPipeline
 from gluefactory.eval.io import get_eval_parser, load_model, parse_eval_args
+from gluefactory.visualization.viz2d import plot_images, plot_lines, save_plot
 
 
 class RDNIMPipeline(EvalPipeline):
@@ -47,6 +49,7 @@ class RDNIMPipeline(EvalPipeline):
         "use_lines": True,
         "repeatability_th": [1, 3, 5],
         "num_lines_th": [10, 50, 300],
+        "debug": False,
     }
     export_keys = []
 
@@ -83,6 +86,11 @@ class RDNIMPipeline(EvalPipeline):
                 "line_matching_scores0",
                 "line_matching_scores1",
             ]
+
+        if conf.debug:
+            if os.path.exists('./rdnim_eval_viz'):
+                os.system('rm -r ./rdnim_eval_viz')
+            os.mkdir('./rdnim_eval_viz')
 
     @classmethod
     def get_dataloader(self, data_conf=None):
@@ -125,6 +133,13 @@ class RDNIMPipeline(EvalPipeline):
             if "lines0" in pred:
                 lines0 = pred["lines0"].cpu()
                 lines1 = pred["lines1"].cpu()
+
+                if self.conf.debug:
+                    plot_images([data['view0']['image'].permute(1,2,0), data['view1']['image'].permute(1,2,0)], ['H0', 'H1'])
+                    plot_lines(lines= [pred['orig_lines0'], pred['orig_lines1']])
+                    save_plot(os.path.join('./rdnim_eval_viz/', f'{i}.jpg'))
+                    plt.close()
+
                 results_i["repeatability"] = compute_repeatability(
                     lines0,
                     lines1,
