@@ -322,6 +322,8 @@ class LineExtractor(BaseModel):
         points_coordinates = self.get_coordinates(
             points, indices, self.coeffs_list[sample_idx], self.coeffs_second_list[sample_idx]
         )
+        points_coordinates[:, 0] = torch.clamp(points_coordinates[:, 0], 0, distance_map.shape[1] - 1)
+        points_coordinates[:, 1] = torch.clamp(points_coordinates[:, 1], 0, distance_map.shape[0] - 1)
 
         # Sample points
         binary_df_sampled = self.sample_map(
