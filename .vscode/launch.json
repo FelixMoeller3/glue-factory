@@ -1,0 +1,21 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Train",
+            "type": "python",
+            "request": "launch",
+            "module": "gluefactory.train",
+            "args": [
+                "experiment_name",
+                "--conf",
+                "${workspaceFolder}/gluefactory/configs/train_jpl_oxparis_base.yaml"
+            ],
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"
+            },
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
