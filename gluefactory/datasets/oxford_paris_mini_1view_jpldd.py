@@ -406,10 +406,11 @@ class _Dataset(torch.utils.data.Dataset):
         full_artificial_img_path = self.img_dir / self.image_sub_paths[idx]
         folder_path = full_artificial_img_path.parent / full_artificial_img_path.stem
         img = self._read_image(folder_path)
-        print(f"Image shape: {img.shape} and type: {img.dtype}")
+        # print(f"Image shape: {img.shape} and type: {img.dtype}")
         # apply augmentation in try/ catch block
         try:
-            img = self.augmentation(image=img, return_tensor=True).permute(1,2,0)
+            img = img.numpy().transpose(1, 2, 0)
+            img = self.augmentation(image=img, return_tensor=True)
         except Exception as e:
             print(f"Error in augmentation: {e}")
         orig_shape = img.shape[-1], img.shape[-2]
