@@ -4,6 +4,9 @@ import pickle
 import random
 import shutil
 import tarfile
+import cv2
+import requests
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +16,9 @@ from tqdm import tqdm
 from gluefactory.datasets import BaseDataset
 from gluefactory.settings import DATA_PATH, root
 from gluefactory.utils.image import load_image, read_image, ImagePreprocessor
+from gluefactory.datasets import augmentations
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +66,13 @@ class OxfordParisMiniOneViewJPLDD(BaseDataset):
             },
             "line_gt": {
                 "data_keys": ["deeplsd_distance_field", "deeplsd_angle_field"],
+                "use_binary_gt": False,
+                "thickness": 1,  # binary df line thickness
                 "enforce_threshold": 5.0,  # Enforce values in distance field to be no greater than this value
             },
+            "augment": {
+                "type": "dark", # other options are "lg", "identity"
+            }
         },
         "img_list": "gluefactory/datasets/oxford_paris_images.txt",
         # img list path from repo root -> use checked in file list, it is similar to pold2 file
@@ -76,6 +87,14 @@ class OxfordParisMiniOneViewJPLDD(BaseDataset):
         # Auto-download the dataset if not existing
         if not (DATA_PATH / conf.data_dir).exists():
             self.download_oxford_paris_mini()
+
+        # Auto-download the binary line DF GT if not existing
+        # path = ((DATA_PATH / conf.data_dir).parent / "deeplsd_line_gt")
+        if not ((DATA_PATH / conf.data_dir).parent / "deeplsd_line_gt").exists() and self.conf.load_features.line_gt.use_binary_gt:
+                print(f"Downloading binary line DF GT...")
+                self.download_binary_df_gt()
+                
+        
         # load image names
         images = self.img_list
         if self.conf.rand_shuffle_seed is not None:
@@ -89,6 +108,38 @@ class OxfordParisMiniOneViewJPLDD(BaseDataset):
             "all": images,
         }
         print(f"DATASET OVERALL(NO-SPLIT) IMAGES: {len(images)}")
+
+        augmentation_map = {
+           "dark": augmentations.DarkAugmentation,
+            "lg": augmentations.LGAugmentation,
+            "identity": augmentations.IdentityAugmentation
+        }
+
+        self.augmentation = augmentation_map[self.conf.load_features.augment.type]()
+
+    def download_binary_df_gt(self):
+        """
+        Downloads the binary distance field GT from the specified URL and saves it to the target folder.
+        """
+        logger.info("Downloading binary DF GT files...")
+
+        # Updated URL with the correct format
+        base_url = "https://deeplsdgt.s3.us-east-1.amazonaws.com/deeplsd_line_gt.zip"
+        output_path = ((DATA_PATH / self.conf.data_dir).parent / "deeplsd_line_gt.zip")
+        response = requests.get(base_url, stream=True)
+
+        if response.status_code == 200:
+            with open(output_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=128):
+                    f.write(chunk)
+
+        with zipfile.ZipFile(output_path, "r") as zip_ref:
+            zip_ref.extractall((DATA_PATH / self.conf.data_dir).parent)
+
+        os.remove(output_path)
+    
+
+
 
     def download_oxford_paris_mini(self):
         logger.info("Downloading the OxfordParis Mini dataset...")
@@ -128,15 +179,16 @@ class OxfordParisMiniOneViewJPLDD(BaseDataset):
 
     def get_dataset(self, split):
         assert split in ["train", "val", "test", "all"]
-        return _Dataset(self.conf, self.images[split], split)
+        return _Dataset(self.conf, self.images[split], split, self.augmentation)
 
 
 
 class _Dataset(torch.utils.data.Dataset):
-    def __init__(self, conf, image_sub_paths: list[str], split):
+    def __init__(self, conf, image_sub_paths: list[str], split, augmentation):
         super().__init__()
         self.split = split
         self.conf = conf
+        self.augmentation = augmentation
         self.grayscale = bool(conf.grayscale)
         self.max_num_gt_kp = conf.load_features.point_gt.max_num_keypoints
         
@@ -162,6 +214,8 @@ class _Dataset(torch.utils.data.Dataset):
 
         self.img_dir = DATA_PATH / conf.data_dir
         self.dlsd_kp_gt_folder = self.img_dir.parent / "deeplsd_kp_gt"
+        self.dlsd_line_gt_folder = self.img_dir.parent / "deeplsd_line_gt"
+
         # Extract image paths
         self.image_sub_paths = image_sub_paths  # [Path(i) for i in image_sub_paths]
 
@@ -257,6 +311,7 @@ class _Dataset(torch.utils.data.Dataset):
         kp_file = image_folder_path / "keypoints.npy"
         kps_file = image_folder_path / "keypoint_scores.npy"
         dlsd_kp_gt_file = self.dlsd_kp_gt_folder / image_folder_path.name / "base_image.npy"
+        dlsd_line_gt_file = self.dlsd_line_gt_folder / image_folder_path.name / "line_endpoints.npy"
 
         #Load Line GT
         # Load pickle file for DF max and min values
@@ -264,7 +319,21 @@ class _Dataset(torch.utils.data.Dataset):
             values = pickle.load(f)
 
         # Load DF
+        use_binary_gt = self.conf.load_features.line_gt.use_binary_gt
+        thickness = self.conf.load_features.line_gt.thickness
+        
         df_img = read_image(image_folder_path / "df.jpg", True)
+        
+        if use_binary_gt:
+            # read dlsd line gt
+            df_img = np.zeros((df_img.shape[0], df_img.shape[1]), dtype=np.float32)
+            line_endpoints = np.load(dlsd_line_gt_file)
+            for line in line_endpoints:
+                start_point = (int(round(line[0][0])), int(round(line[0][1])))
+                end_point = (int(round(line[1][0])), int(round(line[1][1]))) 
+                cv2.line(df_img, start_point, end_point, color=255, thickness=thickness)
+
+
         df_img = df_img.astype(np.float32) / 255.0
         df_img *= values["max_df"]
         thres = self.conf.load_features.line_gt.enforce_threshold
@@ -337,6 +406,13 @@ class _Dataset(torch.utils.data.Dataset):
         full_artificial_img_path = self.img_dir / self.image_sub_paths[idx]
         folder_path = full_artificial_img_path.parent / full_artificial_img_path.stem
         img = self._read_image(folder_path)
+        # print(f"Image shape: {img.shape} and type: {img.dtype}")
+        # apply augmentation in try/ catch block
+        try:
+            img = img.numpy().transpose(1, 2, 0)
+            img = self.augmentation(image=img, return_tensor=True)
+        except Exception as e:
+            print(f"Error in augmentation: {e}")
         orig_shape = img.shape[-1], img.shape[-2]
         size_to_reshape_to = self.select_resize_shape(orig_shape)
         data = {
