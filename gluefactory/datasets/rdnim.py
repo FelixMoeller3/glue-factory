@@ -86,10 +86,11 @@ class RDNIM(BaseDataset, torch.utils.data.Dataset):
         # erode the mask to remove synthetic borders
         ks = self.conf.erosion_kernel_size
         mask = cv2.erode(mask.astype(np.uint8), np.ones((ks, ks), np.uint8), iterations=1)
-        mask = torch.tensor(mask, dtype=torch.int)[None]    # add channel dimension, 1xHxW
-
+        mask = torch.tensor(mask)[None]    # add channel dimension, 1xHxW
         data_dict = self.preprocessor(img)
-        data_dict['mask'] = mask
+        # Preprocess mask the same way to have it rescaled
+        mask_dict = self.preprocessor(mask)
+        data_dict['mask'] = mask_dict["image"]
 
         return data_dict
 
