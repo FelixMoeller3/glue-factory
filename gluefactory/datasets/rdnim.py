@@ -81,16 +81,18 @@ class RDNIM(BaseDataset, torch.utils.data.Dataset):
 
         # get mask for black pixels in the image to identify synthetic borders
         np_img = read_image(self._files[idx][type], self.conf.grayscale)
-        mask = ~np.all(np_img == 0, axis=2)
+        padding_mask = ~np.all(np_img == 0, axis=2)
 
         # erode the mask to remove synthetic borders
         ks = self.conf.erosion_kernel_size
-        mask = cv2.erode(mask.astype(np.uint8), np.ones((ks, ks), np.uint8), iterations=1)
-        mask = torch.tensor(mask)[None]    # add channel dimension, 1xHxW
+        padding_mask = cv2.erode(padding_mask.astype(np.uint8), np.ones((ks, ks), np.uint8), iterations=1)
+        
+        padding_mask = torch.tensor(padding_mask)[None]    # add channel dimension, 1xHxW
         data_dict = self.preprocessor(img)
+
         # Preprocess mask the same way to have it rescaled
-        mask_dict = self.preprocessor(mask)
-        data_dict['mask'] = mask_dict["image"]
+        mask_dict = self.preprocessor(padding_mask)
+        data_dict['padding_mask'] = mask_dict["image"]
 
         return data_dict
 
