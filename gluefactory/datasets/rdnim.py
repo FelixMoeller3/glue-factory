@@ -8,7 +8,7 @@ import cv2
 from pathlib import Path
 from gluefactory.datasets import BaseDataset
 import zipfile
-from gluefactory.utils.image import ImagePreprocessor, load_image
+from gluefactory.utils.image import ImagePreprocessor, load_image, read_image
 from gluefactory.datasets.base_dataset import BaseDataset
 from gluefactory.datasets.utils import read_timestamps
 from gluefactory.settings import DATA_PATH
@@ -20,7 +20,8 @@ class RDNIM(BaseDataset, torch.utils.data.Dataset):
         'preprocessing': ImagePreprocessor.default_conf,
         'data_dir': 'RDNIM',
         'reference': 'day',
-        'grayscale': False
+        'grayscale': False,
+        'erosion_kernel_size': 15
     }
 
     url = "https://cvg-data.inf.ethz.ch/RDNIM/RDNIM.zip"
@@ -77,7 +78,23 @@ class RDNIM(BaseDataset, torch.utils.data.Dataset):
 
     def _read_image(self, idx: int, type: str) -> dict:
         img = load_image(self._files[idx][type], self.conf.grayscale)
-        return self.preprocessor(img)
+
+        # get mask for black pixels in the image to identify synthetic borders
+        np_img = read_image(self._files[idx][type], self.conf.grayscale)
+        padding_mask = ~np.all(np_img == 0, axis=2)
+
+        # erode the mask to remove synthetic borders
+        ks = self.conf.erosion_kernel_size
+        padding_mask = cv2.erode(padding_mask.astype(np.uint8), np.ones((ks, ks), np.uint8), iterations=1)
+        
+        padding_mask = torch.tensor(padding_mask)[None]    # add channel dimension, 1xHxW
+        data_dict = self.preprocessor(img)
+
+        # Preprocess mask the same way to have it rescaled
+        mask_dict = self.preprocessor(padding_mask)
+        data_dict['padding_mask'] = mask_dict["image"]
+
+        return data_dict
 
     def __getitem__(self, idx: int) -> dict:
         img0 = self._read_image(idx,"ref")
