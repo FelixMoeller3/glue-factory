@@ -64,7 +64,7 @@ class OxfordParisMiniOneViewJPLDD(BaseDataset):
             "line_gt": {
                 "data_keys": ["deeplsd_distance_field", "deeplsd_angle_field"],
                 "use_binary_gt": False,
-                "thickness": 1,  # binary df line thickness
+                "interpolated_line_thickness": 1,  # binary df line thickness
                 "enforce_threshold": 5.0,  # Enforce values in distance field to be no greater than this value
             },
         },
@@ -308,7 +308,7 @@ class _Dataset(torch.utils.data.Dataset):
 
         # Load DF
         use_binary_gt = self.conf.load_features.line_gt.use_binary_gt
-        thickness = self.conf.load_features.line_gt.thickness
+        thickness = self.conf.load_features.line_gt.interpolated_line_thickness
 
         df_img = read_image(image_folder_path / "df.jpg", True)
 
