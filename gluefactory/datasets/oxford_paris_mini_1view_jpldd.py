@@ -5,6 +5,8 @@ import random
 import shutil
 import tarfile
 import cv2
+import requests
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -79,6 +81,12 @@ class OxfordParisMiniOneViewJPLDD(BaseDataset):
         # Auto-download the dataset if not existing
         if not (DATA_PATH / conf.data_dir).exists():
             self.download_oxford_paris_mini()
+    
+        # Auto-download the binary line DF GT in case it doesn't exist
+        if not ((DATA_PATH / conf.data_dir).parent / "deeplsd_line_gt").exists() and self.conf.load_features.line_gt.use_binary_gt:
+                print(f"Downloading binary line DF GT...")
+                self.download_binary_df_gt()
+
         # load image names
         images = self.img_list
         if self.conf.rand_shuffle_seed is not None:
@@ -92,6 +100,31 @@ class OxfordParisMiniOneViewJPLDD(BaseDataset):
             "all": images,
         }
         print(f"DATASET OVERALL(NO-SPLIT) IMAGES: {len(images)}")
+
+    def download_binary_df_gt(self):
+        """
+        Downloads the binary distance field GT from the specified URL and saves it to the target folder.
+        """
+        logger.info("Downloading binary DF GT files...")
+
+        # Updated URL with the correct format
+        base_url = "https://deeplsdgt.s3.us-east-1.amazonaws.com/deeplsd_line_gt.zip"
+        output_path = ((DATA_PATH / self.conf.data_dir).parent / "deeplsd_line_gt.zip")
+        response = requests.get(base_url, stream=True)
+
+        if response.status_code == 200:
+            with open(output_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=128):
+                    f.write(chunk)
+
+        with zipfile.ZipFile(output_path, "r") as zip_ref:
+            zip_ref.extractall((DATA_PATH / self.conf.data_dir).parent)
+
+        os.remove(output_path)
+
+
+
+
 
     def download_oxford_paris_mini(self):
         logger.info("Downloading the OxfordParis Mini dataset...")
@@ -168,6 +201,11 @@ class _Dataset(torch.utils.data.Dataset):
         self.dlsd_line_gt_folder = self.img_dir.parent / "deeplsd_line_gt"
         # Extract image paths
         self.image_sub_paths = image_sub_paths  # [Path(i) for i in image_sub_paths]
+
+        print(f"************DEEPLSD KP GT FOLDER: {self.dlsd_kp_gt_folder}")
+
+        # check number of npy files in the folder
+        no_of_binary_line_DFs = len(list(self.dlsd_line_gt_folder.glob("**/*.npy")))
 
         # making them relative for system independent names in export files (path used as name in export)
         if len(self.image_sub_paths) == 0:
