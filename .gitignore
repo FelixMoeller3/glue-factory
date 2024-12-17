@@ -12,3 +12,6 @@ __pycache__
 *.png
 *.hdf5
 image_list100.txt
+/notebooks/data
+/gluefactory/settings.py
+.vscode/launch.json

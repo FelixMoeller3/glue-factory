@@ -4,6 +4,9 @@ import pickle
 import random
 import shutil
 import tarfile
+import cv2
+import requests
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -60,6 +63,8 @@ class OxfordParisMiniOneViewJPLDD(BaseDataset):
             },
             "line_gt": {
                 "data_keys": ["deeplsd_distance_field", "deeplsd_angle_field"],
+                "use_binary_gt": False,
+                "interpolated_line_thickness": 1,  # binary df line thickness
                 "enforce_threshold": 5.0,  # Enforce values in distance field to be no greater than this value
             },
         },
@@ -76,6 +81,12 @@ class OxfordParisMiniOneViewJPLDD(BaseDataset):
         # Auto-download the dataset if not existing
         if not (DATA_PATH / conf.data_dir).exists():
             self.download_oxford_paris_mini()
+    
+        # Auto-download the binary line DF GT in case it doesn't exist
+        if not ((DATA_PATH / conf.data_dir).parent / "deeplsd_line_gt").exists() and self.conf.load_features.line_gt.use_binary_gt:
+                print(f"Downloading binary line DF GT...")
+                self.download_binary_df_gt()
+
         # load image names
         images = self.img_list
         if self.conf.rand_shuffle_seed is not None:
@@ -89,6 +100,31 @@ class OxfordParisMiniOneViewJPLDD(BaseDataset):
             "all": images,
         }
         print(f"DATASET OVERALL(NO-SPLIT) IMAGES: {len(images)}")
+
+    def download_binary_df_gt(self):
+        """
+        Downloads the binary distance field GT from the specified URL and saves it to the target folder.
+        """
+        logger.info("Downloading binary DF GT files...")
+
+        # Updated URL with the correct format
+        base_url = "https://deeplsdgt.s3.us-east-1.amazonaws.com/deeplsd_line_gt.zip"
+        output_path = ((DATA_PATH / self.conf.data_dir).parent / "deeplsd_line_gt.zip")
+        response = requests.get(base_url, stream=True)
+
+        if response.status_code == 200:
+            with open(output_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=128):
+                    f.write(chunk)
+
+        with zipfile.ZipFile(output_path, "r") as zip_ref:
+            zip_ref.extractall((DATA_PATH / self.conf.data_dir).parent)
+
+        os.remove(output_path)
+
+
+
+
 
     def download_oxford_paris_mini(self):
         logger.info("Downloading the OxfordParis Mini dataset...")
@@ -162,8 +198,14 @@ class _Dataset(torch.utils.data.Dataset):
 
         self.img_dir = DATA_PATH / conf.data_dir
         self.dlsd_kp_gt_folder = self.img_dir.parent / "deeplsd_kp_gt"
+        self.dlsd_line_gt_folder = self.img_dir.parent / "deeplsd_line_gt"
         # Extract image paths
         self.image_sub_paths = image_sub_paths  # [Path(i) for i in image_sub_paths]
+
+        print(f"************DEEPLSD KP GT FOLDER: {self.dlsd_kp_gt_folder}")
+
+        # check number of npy files in the folder
+        no_of_binary_line_DFs = len(list(self.dlsd_line_gt_folder.glob("**/*.npy")))
 
         # making them relative for system independent names in export files (path used as name in export)
         if len(self.image_sub_paths) == 0:
@@ -257,6 +299,7 @@ class _Dataset(torch.utils.data.Dataset):
         kp_file = image_folder_path / "keypoints.npy"
         kps_file = image_folder_path / "keypoint_scores.npy"
         dlsd_kp_gt_file = self.dlsd_kp_gt_folder / image_folder_path.name / "base_image.npy"
+        dlsd_line_gt_file = self.dlsd_line_gt_folder / image_folder_path.name / "line_endpoints.npy"
 
         #Load Line GT
         # Load pickle file for DF max and min values
@@ -264,7 +307,20 @@ class _Dataset(torch.utils.data.Dataset):
             values = pickle.load(f)
 
         # Load DF
+        use_binary_gt = self.conf.load_features.line_gt.use_binary_gt
+        thickness = self.conf.load_features.line_gt.interpolated_line_thickness
+
         df_img = read_image(image_folder_path / "df.jpg", True)
+
+        if use_binary_gt:
+            # read dlsd line gt
+            df_img = np.zeros((df_img.shape[0], df_img.shape[1]), dtype=np.float32)
+            line_endpoints = np.load(dlsd_line_gt_file)
+            for line in line_endpoints:
+                start_point = (int(round(line[0][0])), int(round(line[0][1])))
+                end_point = (int(round(line[1][0])), int(round(line[1][1]))) 
+                cv2.line(df_img, start_point, end_point, color=255, thickness=thickness)
+
         df_img = df_img.astype(np.float32) / 255.0
         df_img *= values["max_df"]
         thres = self.conf.load_features.line_gt.enforce_threshold
