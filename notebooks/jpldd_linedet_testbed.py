@@ -117,6 +117,7 @@ jpldd_conf = {
 }
 
 dset_conf = {
+    "name": "hypersim_1view_jpldd",
     "reshape": 800,  # ex. 800
     "multiscale_learning": {
         "do": False,
@@ -124,7 +125,7 @@ dset_conf = {
         "scale_selection": 'round-robin' # random or round-robin
     },
     "load_features": {
-        "do": True,
+        "do": False,
         "check_exists": True,
         "point_gt": {
             "data_keys": ["superpoint_heatmap", "gt_keypoints", "gt_keypoints_scores"],
@@ -254,26 +255,30 @@ jpldd_model.eval()
 line_extractor = LineExtractor(jpldd_conf["line_detection"]["conf"])
 
 ## Dataset
-oxpa_2 = get_dataset("oxford_paris_mini_1view_jpldd")(dset_conf)
-ds = oxpa_2.get_dataset(split="train")
+ds = get_dataset(dset_conf.name)(dset_conf).get_dataset(split="train")
 
 # load one test element
 elem = ds[0]
 print(f"Keys: {elem.keys()}")
 
 # print example shapes
-af = elem["deeplsd_angle_field"]
-df = elem["deeplsd_distance_field"]
-hmap = elem["superpoint_heatmap"]
+img = elem["image"]
+print(f"Image Shape: {img.shape}")
 
-print(f"AF: type: {type(af)}, shape: {af.shape}, min: {torch.min(af)}, max: {torch.max(af)}")
-print(f"DF: type: {type(df)}, shape: {df.shape}, min: {torch.min(df)}, max: {torch.max(df)}")
-print(f"KP-HMAP: type: {type(hmap)}, shape: {hmap.shape}, min: {torch.min(hmap)}, max: {torch.max(hmap)}, sum: {torch.sum(hmap)}")
+if dset_conf.load_features.do:
+    # print example shapes
+    af = elem["deeplsd_angle_field"]
+    df = elem["deeplsd_distance_field"]
+    hmap = elem["superpoint_heatmap"]
+
+    print(f"AF: type: {type(af)}, shape: {af.shape}, min: {torch.min(af)}, max: {torch.max(af)}")
+    print(f"DF: type: {type(df)}, shape: {df.shape}, min: {torch.min(df)}, max: {torch.max(df)}")
+    print(f"KP-HMAP: type: {type(hmap)}, shape: {hmap.shape}, min: {torch.min(hmap)}, max: {torch.max(hmap)}, sum: {torch.sum(hmap)}")
 
 ## Inference - Random 300 samples [Get FPS]
 # Comment while inspecting binary_distance_field
 random.seed(42)
-rand_idx = random.sample(range(0, len(ds)), 300) 
+rand_idx = random.sample(range(0, len(ds)), min(300, len(ds))) 
 """
 for i in rand_idx:
     img_torch = ds[i]["image"].to(device).unsqueeze(0)
