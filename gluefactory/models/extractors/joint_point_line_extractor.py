@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from kornia.geometry.transform import warp_perspective
 from omegaconf import OmegaConf
-
+from gluefactory.geometry.desc_losses import caps_window_loss
 from gluefactory.models.utils.metrics_lines import get_rep_and_loc_error
 from gluefactory.datasets.homographies_deeplsd import sample_homography
 from gluefactory.models import get_model
@@ -55,6 +55,7 @@ class JointPointLineDetectorDescriptor(BaseModel):
         "subpixel_refinement": True,  # perform subpixel refinement after detection
         "force_num_keypoints": False,
         "training": {  # training settings
+            "two_view": False, # whether training is done with a two-view pipeline (True) or with a one-view pipeline (False)
             "do": False,  # switch to turn off other settings regarding training = "training mode"
             "aliked_pretrained": True,
             "pretrain_kp_decoder": True,
@@ -554,34 +555,67 @@ class JointPointLineDetectorDescriptor(BaseModel):
         losses = {}
         metrics = {}
 
+        prediction_dict = pred['view0'] if self.conf.training.two_view else pred
+        gt_dict = data["view0"] if self.conf.training.two_view else data
+        H = data["H_0to_1"] if self.conf.training.two_view else None
+
         # define padding mask which is only ones if no padding is used -> makes loss compatible with any scaling technique and whether padding is used or not
-        padding_mask = data.get("padding_mask", torch.ones_like(data["image"]))[
+        padding_mask = gt_dict.get("padding_mask", torch.ones_like(gt_dict["image"]))[
             :, 0, :, :
         ].int()
 
         # Use Weighted BCE Loss for Point Heatmap
         keypoint_scoremap_loss = self.loss_fn(
-            pred["keypoint_and_junction_score_map"] * padding_mask,
-            data["superpoint_heatmap"] * padding_mask,
+            prediction_dict["keypoint_and_junction_score_map"] * padding_mask,
+            gt_dict["superpoint_heatmap"] * padding_mask,
         ).mean(dim=(1, 2))
 
         losses["keypoint_and_junction_score_map"] = keypoint_scoremap_loss
         # Descriptor Loss: expect aliked descriptors as GT
         if self.conf.training.train_descriptors.do:
-            data = {
+            if self.conf.training.two_view:
+                data = {
                 **data,
                 **self.get_groundtruth_descriptors(
-                    {"keypoints": pred["keypoints_raw"], "image": data["image"]}
+                    {"keypoints": prediction_dict["keypoints_raw"], "image": gt_dict["image"]}
                 ),
-            }
-            keypoint_descriptor_loss = F.l1_loss(
-                pred["descriptors"], data["aliked_descriptors"], reduction="none"
-            ).mean(dim=(1, 2))
+                }
+                keypoint_descriptor_loss = F.l1_loss(
+                    prediction_dict["descriptors"], gt_dict["aliked_descriptors"], reduction="none"
+                ).mean(dim=(1, 2))
+            else:
+                desc_loss0 = caps_window_loss(
+                    pred["keypoints0"][:, :, [1, 0]],
+                    pred["keypoint_scores0"],
+                    pred["descriptors0"],
+                    H,
+                    pred["dense_desc1"],
+                    temperature=(
+                        self.temperature
+                        if self.conf.temperature == "learned"
+                        else self.conf.temperature
+                    ),
+                    s=1,
+                )
+                desc_loss1 = caps_window_loss(
+                    pred["keypoints1"][:, :, [1, 0]],
+                    pred["keypoint_scores1"],
+                    pred["descriptors1"],
+                    torch.inverse(H),
+                    pred["dense_desc0"],
+                    temperature=(
+                        self.temperature
+                        if self.conf.temperature == "learned"
+                        else self.conf.temperature
+                    ),
+                    s=1,
+                )
+                keypoint_descriptor_loss = (desc_loss0 + desc_loss1) / 2
             losses["descriptors"] = keypoint_descriptor_loss
 
         # use angular loss for anglefield, if use of af is activated
         if self.conf.use_line_anglefield:
-            af_diff = data["deeplsd_angle_field"] - pred["line_anglefield"]
+            af_diff = gt_dict["deeplsd_angle_field"] - prediction_dict["line_anglefield"]
             line_af_loss = (
                 torch.minimum(af_diff**2, (torch.pi - af_diff.abs()) ** 2)
                 * padding_mask
@@ -590,8 +624,9 @@ class JointPointLineDetectorDescriptor(BaseModel):
             )  # pixelwise minimum
             losses["line_anglefield"] = line_af_loss
 
+        # Distance field loss. Depends on the pipeline (two-view or one-view)
         # use normalized versions for loss
-        gt_mask = data["deeplsd_distance_field"] < self.conf.line_neighborhood
+        gt_mask = gt_dict["deeplsd_distance_field"] < self.conf.line_neighborhood
         line_df_loss = F.l1_loss(
             self.normalize_df(pred["line_distancefield"]) * gt_mask * padding_mask,
             self.normalize_df(data["deeplsd_distance_field"]) * gt_mask * padding_mask,
@@ -599,6 +634,14 @@ class JointPointLineDetectorDescriptor(BaseModel):
             reduction="none",
         ).mean(dim=(1, 2))
         losses["line_distancefield"] = line_df_loss
+        if self.conf.training.two_view:
+            warped_df = warp_perspective(pred["view1"]["line_distancefield"],torch.linalg.inv(H))
+            losses["line_distancefield"] += F.l1_loss(
+                self.normalize_df(pred["line_distancefield"]) * gt_mask * padding_mask,
+                self.normalize_df(warped_df) * gt_mask * padding_mask,
+                # only supervise in line neighborhood
+                reduction="none",
+            ).mean(dim=(1, 2))
 
         # Compute overall loss
         overall_loss = (
