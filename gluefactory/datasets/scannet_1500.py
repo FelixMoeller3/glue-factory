@@ -179,12 +179,14 @@ class scannet_1500(BaseDataset, torch.utils.data.Dataset):
         H = self.pairs[idx]["T_0to1"].astype(np.float32)
 
         return {
-            "H_0to1": H,
+            "T_0to1": H,
             "scene": idx,
             "idx": idx,
             "name": f"{idx}/{idx}.ppm",
             "view0": data0,
             "view1": data1,
+            "K0":self.pairs[idx]['K0'],
+            "K1":self.pairs[idx]['K1']
         }
 
 
