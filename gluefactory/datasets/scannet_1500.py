@@ -48,17 +48,19 @@ def get_relative_transform(pose0, pose1):
 
 class scannet_1500(BaseDataset, torch.utils.data.Dataset):
 
-    default_config = {
-        "scannet_path": "Scannet-Xfeat/ScanNet1500/scannet_test_1500",
+    default_conf = {
+        "scannet_path": "Scannet-Xfeat/ScanNet1500/",
         "gt_path": "Scannet-Xfeat/ScanNet1500/test.npz",
+        "subset": None,
         "cache_images": True,
         "preprocessing": ImagePreprocessor.default_conf,
+        "grayscale": False,
     }
 
     def _init(self, conf):
-        self.config = {**self.default_config, **conf}
         assert conf.batch_size == 1
         self.preprocessor = ImagePreprocessor(conf.preprocessing)
+        self.config = conf
 
         self.root = DATA_PATH / self.config["scannet_path"]
         self.gt = DATA_PATH / self.config["gt_path"]
@@ -75,22 +77,28 @@ class scannet_1500(BaseDataset, torch.utils.data.Dataset):
     def load_images(self):
         for pair in tqdm(self.pairs, desc="Caching images"):
             if pair["image0"] not in self.image_cache:
-                self.image_cache[pair["image0"]] = cv2.imread(pair["image0"])
+                self.image_cache[pair["image0"]] = self._read_image(pair["image0"])
             if pair["image1"] not in self.image_cache:
-                self.image_cache[pair["image1"]] = cv2.imread(pair["image1"])
+                self.image_cache[pair["image1"]] = self._read_image(pair["image1"])
 
     def _read_image(self, path):
-        if self.config["cache_images"]:
-            return self.preprocessor(self.image_cache[path])
-        else:
-            return self.preprocessor(cv2.imread(path))
+        img = load_image(path, self.conf.grayscale)
+        return self.preprocessor(img)
+        # if self.config["cache_images"]:
+        #     return self.preprocessor(self.image_cache[path])
+        # else:
+        #     return self.preprocessor(cv2.imread(path))
+        
+    def get_dataset(self, split):
+        assert split in ["val", "test"]
+        return self
 
     def _read_gt(self):
         pairs = []
-        gt_poses = np.load(self.config["gt_path"])
+        gt_poses = np.load(self.gt)
         names = gt_poses["name"]
 
-        for i in range(len(names)):
+        for i in range(50):
             scene_id = names[i, 0]
             scene_idx = names[i, 1]
             scene = f"scene{scene_id:04d}_{scene_idx:02d}"
@@ -100,7 +108,7 @@ class scannet_1500(BaseDataset, torch.utils.data.Dataset):
 
             K0 = np.loadtxt(
                 os.path.join(
-                    self.config["scannet_path"],
+                    self.root,
                     "scannet_test_1500",
                     scene,
                     "intrinsic/intrinsic_color.txt",
@@ -110,7 +118,7 @@ class scannet_1500(BaseDataset, torch.utils.data.Dataset):
 
             pose_0 = np.loadtxt(
                 os.path.join(
-                    self.config["scannet_path"],
+                    self.root,
                     "scannet_test_1500",
                     scene,
                     "pose",
@@ -119,7 +127,7 @@ class scannet_1500(BaseDataset, torch.utils.data.Dataset):
             )
             pose_1 = np.loadtxt(
                 os.path.join(
-                    self.config["scannet_path"],
+                    self.root,
                     "scannet_test_1500",
                     scene,
                     "pose",
@@ -131,14 +139,14 @@ class scannet_1500(BaseDataset, torch.utils.data.Dataset):
             pairs.append(
                 {
                     "image0": os.path.join(
-                        self.config["scannet_path"],
+                        self.root,
                         "scannet_test_1500",
                         scene,
                         "color",
                         image0 + ".jpg",
                     ),
                     "image1": os.path.join(
-                        self.config["scannet_path"],
+                        self.root,
                         "scannet_test_1500",
                         scene,
                         "color",
@@ -159,11 +167,19 @@ class scannet_1500(BaseDataset, torch.utils.data.Dataset):
 
         if self.pairs[idx]['image0'] not in self.image_cache:
             data0 = self._read_image(self.pairs[idx]['image0'])
+        else:
+            data0 = self.image_cache[self.pairs[idx]['image0']]
+
         if self.pairs[idx]['image1'] not in self.image_cache:
             data1 = self._read_image(self.pairs[idx]['image1'])
+        else:
+            data1 = self.image_cache[self.pairs[idx]['image1']]
+
+        # H = data1["transform"] @ self.pairs[idx]["T_0to1"].astype(np.float32) @ np.linalg.inv(data0["transform"])
+        H = self.pairs[idx]["T_0to1"].astype(np.float32)
 
         return {
-            "H_0to1": self.pairs["T_0to1"].astype(np.float32),
+            "H_0to1": H,
             "scene": idx,
             "idx": idx,
             "name": f"{idx}/{idx}.ppm",

@@ -171,7 +171,7 @@ class ScannetEvalPipeline(EvalPipeline):
     @classmethod
     def get_dataloader(self, data_conf=None):
         data_conf = data_conf if data_conf else self.default_conf["data"]
-        dataset = get_dataset("hpatches")(data_conf)
+        dataset = get_dataset("scannet")(data_conf)
         return dataset.get_data_loader("test")
 
     def get_predictions(self, experiment_dir, model=None, overwrite=False):
