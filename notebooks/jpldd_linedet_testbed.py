@@ -24,7 +24,7 @@ from gluefactory.models.lines.pold2_extractor import LineExtractor
 from gluefactory.settings import DATA_PATH
 
 # Configs and Constants
-DEBUG_DIR = "tmp_testbed"
+DEBUG_DIR = "tmp_testbed_heatmap"
 
 deeplsd_conf = {
     "detect_lines": True,
@@ -38,10 +38,10 @@ deeplsd_conf = {
 }
 
 jpldd_conf = {
-    "name": "joint_point_line_extractor",
+    "name": "joint_point_line_extractor_heatmap",
     "max_num_keypoints": 1000,  # setting for training, for eval: -1
     "timeit": True,  # override timeit: False from BaseModel
-    "line_df_decoder_channels": 32,
+    "line_df_decoder_channels": 64,
     "line_af_decoder_channels": 32,
     "line_detection": {
         "do": True,
@@ -52,7 +52,7 @@ jpldd_conf = {
             "samples": [24],
             "distance_map": {
                 "max_value": 5,
-                "threshold": 0.45,
+                "threshold": 0.3,
                 "smooth_threshold": 0.8,
                 "avg_filter_size": 13,
                 "avg_filter_padding": 6,
@@ -64,6 +64,7 @@ jpldd_conf = {
                 "use": True,  # Use brute force sampling for distance field in the second stage
                 "image_size": 800,  # Image size for which the coefficients are generated
                 "inlier_ratio": 0.8,  # Ratio of inliers
+                "binary_threshold": 0.3,  # Threshold for binary distance map
                 "max_accepted_mean_value": 0.3,  # Maximum accepted DF mean value along the line
             },
             "angle_map": {
@@ -109,7 +110,7 @@ jpldd_conf = {
             # "device": "cpu"
         },
     },
-    "checkpoint": "/local/home/Point-Line/outputs/training/oxparis_800_focal/checkpoint_best.tar",
+    "checkpoint": "/local/home/Point-Line/outputs/training/line_binmap_focal_a0.25_b2/checkpoint_best.tar",
 }
 
 dset_conf = {
@@ -127,7 +128,7 @@ dset_conf = {
             "use_score_heatmap": True,
         },
         "line_gt": {
-            "data_keys": ["deeplsd_distance_field", "deeplsd_angle_field"],
+            "data_keys": ["deeplsd_line_heatmap"],
             "enforce_threshold": 5.0,  # Enforce values in distance field to be no greater than this value
         },
     },
@@ -255,14 +256,14 @@ deeplsd_net.load_state_dict(ckpt["model"])
 deeplsd_net = deeplsd_net.to(device).eval()
 
 ## Model
-jpldd_model = get_model("joint_point_line_extractor")(jpldd_conf).to(device)
+jpldd_model = get_model("joint_point_line_extractor_heatmap")(jpldd_conf).to(device)
 jpldd_model.eval()
 
 ## Line Extraction
 line_extractor = LineExtractor(jpldd_conf["line_detection"]["conf"])
 
 ## Dataset
-oxpa_2 = get_dataset("oxford_paris_mini_1view_jpldd")(dset_conf)
+oxpa_2 = get_dataset("oxford_paris_mini_1view_jpldd_binheatmap")(dset_conf)
 ds = oxpa_2.get_dataset(split="train")
 
 # load one test element
@@ -270,13 +271,10 @@ elem = ds[0]
 print(f"Keys: {elem.keys()}")
 
 # print example shapes
-af = elem["deeplsd_angle_field"]
-df = elem["deeplsd_distance_field"]
+# af = elem["deeplsd_angle_field"]
+df = elem["deeplsd_line_heatmap"]
 hmap = elem["superpoint_heatmap"]
 
-print(
-    f"AF: type: {type(af)}, shape: {af.shape}, min: {torch.min(af)}, max: {torch.max(af)}"
-)
 print(
     f"DF: type: {type(df)}, shape: {df.shape}, min: {torch.min(df)}, max: {torch.max(df)}"
 )
@@ -335,7 +333,7 @@ for i in tqdm(rand_idx):
 
         viz_img = np.concatenate([viz_img, img], axis=1)
 
-        df = output_model["line_distancefield"][0].cpu().numpy()
+        df = output_model["line_binary_heatmap"][0].cpu().numpy()
         df = (df / np.max(df) * 255).astype(np.uint8)
         df = cv2.applyColorMap(df, cv2.COLORMAP_JET)
         df = cv2.copyMakeBorder(
@@ -343,7 +341,7 @@ for i in tqdm(rand_idx):
         )
         df = cv2.putText(
             df,
-            "JPLDD Distance Field",
+            "JPLDD Binary Heatmap",
             (10, 30),
             cv2.FONT_HERSHEY_SIMPLEX,
             1,

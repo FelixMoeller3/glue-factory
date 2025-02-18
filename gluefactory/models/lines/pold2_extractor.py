@@ -251,18 +251,18 @@ class LineExtractor(BaseModel):
     # Distance map processing
     def process_distance_map(self, distance_map):
         df_conf = self.conf.distance_map
-        distance_map = distance_map < df_conf.threshold
+        distance_map = distance_map > df_conf.threshold
 
-        average_filter = nn.AvgPool2d(
-            kernel_size=df_conf.avg_filter_size,
-            stride=df_conf.avg_filter_stride,
-            padding=df_conf.avg_filter_padding,
-        )
+        # average_filter = nn.AvgPool2d(
+        #     kernel_size=df_conf.avg_filter_size,
+        #     stride=df_conf.avg_filter_stride,
+        #     padding=df_conf.avg_filter_padding,
+        # )
 
-        distance_map_smooth = average_filter(distance_map[None, :, :].float())
-        output = (distance_map & (distance_map_smooth < df_conf.smooth_threshold))[0]
+        # distance_map_smooth = average_filter(distance_map[None, :, :].float())
+        # output = (distance_map & (distance_map_smooth < df_conf.smooth_threshold))[0]
 
-        return output
+        return distance_map
 
     def get_coordinates(self, points, indices, coeffs, coeffs_second):
         first_point_position = points[indices[:, 0]].view(-1)
@@ -384,29 +384,29 @@ class LineExtractor(BaseModel):
         binary_df_sampled = self.sample_map(
             points_coordinates, binary_distance_map
         ).view(num_sample, -1)
-        df_sampled = self.sample_map(points_coordinates, distance_map).view(
-            num_sample, -1
-        )
+        # df_sampled = self.sample_map(points_coordinates, distance_map).view(
+        #     num_sample, -1
+        # )
 
         # We reduce the values along the line
         detected_line_indices = (
             torch.sum(binary_df_sampled, dim=0) >= num_sample * inlier_ratio
         )
-        detected_line_float = (
-            torch.mean(df_sampled.float(), dim=0) <= max_accepted_mean_value
-        )
+        # detected_line_float = (
+        #     torch.mean(df_sampled.float(), dim=0) <= max_accepted_mean_value
+        # )
 
         if self.conf.debug:
             print(f"=============== Distance Filter =================")
             print(f"Decision pos lines binary df: {torch.sum(detected_line_indices)}")
-            print(f"Decision pos lines df: {torch.sum(detected_line_float)}")
-            print(
-                f"Decision overall num lines: {torch.sum(detected_line_indices & detected_line_float)}"
-            )
+            # print(f"Decision pos lines df: {torch.sum(detected_line_float)}")
+            # print(
+            #     f"Decision overall num lines: {torch.sum(detected_line_indices & detected_line_float)}"
+            # )
             print(f"===============================================")
 
         # Finally we can filter the indices
-        return indices[detected_line_indices & detected_line_float]
+        return indices[detected_line_indices]
 
     def brute_force_filter_with_distance_field(
         self,
@@ -448,7 +448,7 @@ class LineExtractor(BaseModel):
         )  # Shape: (num_lines * bf_num_samples_df, 2)
 
         binary_distance_map = (
-            distance_map < self.conf.brute_force_df.binary_threshold
+            distance_map > self.conf.brute_force_df.binary_threshold
         ).float()
 
         # Sample points
@@ -775,9 +775,9 @@ class LineExtractor(BaseModel):
         indices_image = self.indices[:number_pairs]
 
         # normalize DF to [0, 1] by dividing by max value TODO: strict positive Z-Score normalization ?
-        df_max = self.conf.distance_map.max_value
+        # df_max = self.conf.distance_map.max_value
         distance_map = distance_map.float()
-        distance_map /= df_max
+        distance_map /= distance_map.max()
 
         # normalize AF to [0, 1]
         if angle_map is None:
