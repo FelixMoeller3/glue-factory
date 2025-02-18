@@ -62,6 +62,7 @@ class LineExtractor(BaseModel):
         },
         "mlp_conf": POLD2_MLP.default_conf,
         "nms": True,
+        "nms_dist_tolerance": 3,
         "filters": {
             "distance_field": True,
             "angle_field": True,
@@ -752,6 +753,60 @@ class LineExtractor(BaseModel):
                 print(f"Num lines after MLP stage: {indices_image.shape[0]}")
 
         return indices_image
+    
+    def candidate_suppression(self, junctions, candidate_map):
+        """ Suppress overlapping long lines in the candidate segments. """
+        # Define the distance tolerance
+        dist_tolerance = self.conf.nms_dist_tolerance
+
+        # Compute distance between junction pairs
+        # (num_junc x 1 x 2) - (1 x num_junc x 2) => num_junc x num_junc map
+        line_dist_map = torch.sum((torch.unsqueeze(junctions, dim=1)
+                                  - junctions[None, ...]) ** 2, dim=-1) ** 0.5
+
+        # Fetch all the "detected lines"
+        seg_indexes = torch.where(torch.triu(candidate_map, diagonal=1))
+        start_point_idxs = seg_indexes[0]
+        end_point_idxs = seg_indexes[1]
+        start_points = junctions[start_point_idxs, :]
+        end_points = junctions[end_point_idxs, :]
+
+        # Fetch corresponding entries
+        line_dists = line_dist_map[start_point_idxs, end_point_idxs]
+
+        # Check whether they are on the line
+        dir_vecs = ((end_points - start_points)
+                    / torch.norm(end_points - start_points,
+                                 dim=-1)[..., None])
+        # Get the orthogonal distance
+        cand_vecs = junctions[None, ...] - start_points.unsqueeze(dim=1)
+        cand_vecs_norm = torch.norm(cand_vecs, dim=-1)
+        # Check whether they are projected directly onto the segment
+        proj = (torch.einsum('bij,bjk->bik', cand_vecs, dir_vecs[..., None])
+                / line_dists[..., None, None])
+        # proj is num_segs x num_junction x 1
+        proj_mask = (proj >=0) * (proj <= 1)
+        cand_angles = torch.acos(
+            torch.einsum('bij,bjk->bik', cand_vecs, dir_vecs[..., None])
+            / cand_vecs_norm[..., None])
+        cand_dists = cand_vecs_norm[..., None] * torch.sin(cand_angles)
+        junc_dist_mask = cand_dists <= dist_tolerance
+        junc_mask = junc_dist_mask * proj_mask
+
+        # Minus starting points
+        num_segs = start_point_idxs.shape[0]
+        junc_counts = torch.sum(junc_mask, dim=[1, 2])
+        junc_counts -= junc_mask[..., 0][torch.arange(0, num_segs),
+                                         start_point_idxs].to(torch.int)
+        junc_counts -= junc_mask[..., 0][torch.arange(0, num_segs),
+                                         end_point_idxs].to(torch.int)
+        
+        # Get the invalid candidate mask
+        final_mask = junc_counts > 0
+        candidate_map[start_point_idxs[final_mask],
+                      end_point_idxs[final_mask]] = 0
+            
+        return candidate_map
 
     def _forward(self, data: dict) -> torch.Tensor:
         points = data["points"]
@@ -805,6 +860,17 @@ class LineExtractor(BaseModel):
         filtered_idx = self.multi_stage_filter(
             points, binary_distance_map, distance_map, angle_map, indices_image
         )
+
+        # A binary matrix where 1 indicates that a line segment exists between two junctions.
+        candidate_map = torch.zeros(len(points), len(points)).to(self.device)
+        candidate_map[filtered_idx[:, 0], filtered_idx[:, 1]] = 1
+
+        # Suppress overlapping long lines
+        candidate_map = self.candidate_suppression(points, candidate_map)
+        filtered_idx = torch.stack(torch.where(candidate_map)).T
+        
+        if self.conf.debug:
+            print(f"Number of lines after NMS: {len(filtered_idx)}")
 
         # Apply NMS
         if self.conf.nms:
