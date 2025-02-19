@@ -59,7 +59,7 @@ class JointPointLineDetectorDescriptor(BaseModel):
             "do": False,  # switch to turn off other settings regarding training = "training mode"
             "aliked_pretrained": True,
             "pretrain_kp_decoder": True,
-            "train_descriptors": {
+            "train_descriptors": { # for train decriptors in one-view: generate gt descriptrs, in two-view: use caps loss
                 "do": True,  # if train is True, initialize ALIKED Light model form OTF Descriptor GT
                 "gt_aliked_model": "aliked-n32",
             },  # if train is True, initialize ALIKED Light model form OTF Descriptor GT
@@ -202,8 +202,8 @@ class JointPointLineDetectorDescriptor(BaseModel):
                 torch.eq(self.encoder_backbone.conv1.weight.data.clone(), old_test_val1)
             ).item()  # test if weights really loaded!
 
-        # Initialize Lightweight ALIKED model to perform OTF GT generation for descriptors if training
-        if conf.training.do and conf.training.train_descriptors.do:
+        # Initialize Lightweight ALIKED model to perform OTF GT generation for descriptors if training in one-view setting
+        if conf.training.do and conf.training.train_descriptors.do and not conf.training.two_view:
             logger.warning("Load ALiked Lightweight model for descriptor training...")
             aliked_gt_cfg = {
                 "model_name": self.conf.training.train_descriptors.gt_aliked_model,
@@ -389,8 +389,8 @@ class JointPointLineDetectorDescriptor(BaseModel):
         if self.conf.timeit:
             self.timings["keypoint-detection"].append(sync_and_time() - start_keypoints)
 
-        # raw output of DKD needed to generate GT-Descriptors
-        if self.conf.training.train_descriptors.do:
+        # raw output of DKD needed to generate GT-Descriptors (ONLY done in ONE_VIEW training)
+        if self.conf.training.train_descriptors.do and not self.conf.training.two_view:
             output["keypoints_raw"] = keypoints
 
         _, _, h, w = image.shape
@@ -414,7 +414,7 @@ class JointPointLineDetectorDescriptor(BaseModel):
 
         # Extract Lines from Learned Part of the Network
         # Only Perform line detection when NOT in training mode
-        if self.conf.line_detection.do and not self.training:
+        if self.conf.line_detection.do and not self.training: # TODO: we might need to do line detect during training for an end to end train setting
             if self.conf.timeit:
                 start_lines = sync_and_time()
             lines = []
@@ -564,16 +564,17 @@ class JointPointLineDetectorDescriptor(BaseModel):
             :, 0, :, :
         ].int()
 
-        # Use Weighted BCE Loss for Point Heatmap
+        # Use BCE, WeightedBCE or Focal Loss for point position loss
         keypoint_scoremap_loss = self.loss_fn(
             prediction_dict["keypoint_and_junction_score_map"] * padding_mask,
             gt_dict["superpoint_heatmap"] * padding_mask,
         ).mean(dim=(1, 2))
 
         losses["keypoint_and_junction_score_map"] = keypoint_scoremap_loss
-        # Descriptor Loss: expect aliked descriptors as GT
+        # If training descriptors: decide between one-view and two-view node
         if self.conf.training.train_descriptors.do:
-            if self.conf.training.two_view:
+            if not self.conf.training.two_view:
+                # in case of one view: generate gt descriptors to directly supervise using l1 loss
                 data = {
                 **data,
                 **self.get_groundtruth_descriptors(
@@ -584,6 +585,7 @@ class JointPointLineDetectorDescriptor(BaseModel):
                     prediction_dict["descriptors"], gt_dict["aliked_descriptors"], reduction="none"
                 ).mean(dim=(1, 2))
             else:
+                # in case of two-view: use the caps window loss for descriptors
                 desc_loss0 = caps_window_loss(
                     pred["keypoints0"][:, :, [1, 0]],
                     pred["keypoint_scores0"],
@@ -635,6 +637,7 @@ class JointPointLineDetectorDescriptor(BaseModel):
         ).mean(dim=(1, 2))
         losses["line_distancefield"] = line_df_loss
         if self.conf.training.two_view:
+            # In case of two-view, add df consistency loss
             warped_df = warp_perspective(pred["view1"]["line_distancefield"],torch.linalg.inv(H))
             losses["line_distancefield"] += F.l1_loss(
                 self.normalize_df(pred["line_distancefield"]) * gt_mask * padding_mask,
