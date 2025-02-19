@@ -24,6 +24,7 @@ from gluefactory.models.utils.metrics_points import (
 )
 from gluefactory.settings import DATA_PATH
 from gluefactory.utils.misc import change_dict_key, sync_and_time
+from gluefactory.utils.warp import warp_points
 
 # Parameters for calculating point metrics in validation loss
 default_H_params = {
@@ -586,33 +587,7 @@ class JointPointLineDetectorDescriptor(BaseModel):
                 ).mean(dim=(1, 2))
             else:
                 # in case of two-view: use the caps window loss for descriptors
-                desc_loss0 = caps_window_loss(
-                    pred["keypoints0"][:, :, [1, 0]],
-                    pred["keypoint_scores0"],
-                    pred["descriptors0"],
-                    H,
-                    pred["dense_desc1"],
-                    temperature=(
-                        self.temperature
-                        if self.conf.temperature == "learned"
-                        else self.conf.temperature
-                    ),
-                    s=1,
-                )
-                desc_loss1 = caps_window_loss(
-                    pred["keypoints1"][:, :, [1, 0]],
-                    pred["keypoint_scores1"],
-                    pred["descriptors1"],
-                    torch.inverse(H),
-                    pred["dense_desc0"],
-                    temperature=(
-                        self.temperature
-                        if self.conf.temperature == "learned"
-                        else self.conf.temperature
-                    ),
-                    s=1,
-                )
-                keypoint_descriptor_loss = (desc_loss0 + desc_loss1) / 2
+                keypoint_descriptor_loss = sparse_nre_loss(prediction_dict["descriptors"],pred["view1"]["descriptors"],compute_matches(prediction_dict["keypoints_raw"],pred["view1"]["keypoints_raw"],H))
             losses["descriptors"] = keypoint_descriptor_loss
 
         # use angular loss for anglefield, if use of af is activated
@@ -820,3 +795,44 @@ class JointPointLineDetectorDescriptor(BaseModel):
         with torch.no_grad():
             warped_outputs = self({"image": warped_imgs})
         return warped_outputs, Hs
+    
+    import torch
+import torch.nn.functional as F
+
+def compute_matches(keypoints_im1: torch.Tensor, keypoints_im2: torch.Tensor, H: torch.Tensor) -> torch.Tensor:
+    warped_points = warp_points(keypoints_im2,torch.linalg.inv(H))
+    dists = torch.linalg.norm(keypoints_im1[:,None,:] - warped_points[:,:2],axis=2)
+    return torch.stack(torch.where(dists < 3.0)).T
+    
+
+def sparse_nre_loss(descriptors1: torch.Tensor, descriptors2: torch.Tensor, matches: torch.Tensor, temperature: float=0.1):
+    """
+    Compute the Sparse Neural Reprojection Error (NRE) loss.
+
+    Args:
+        descriptors1 (torch.Tensor): Descriptors from image 1 (N1 x D).
+        descriptors2 (torch.Tensor): Descriptors from image 2 (N2 x D).
+        matches (list of tuples): List of matched keypoint indices [(i, j), ...].
+        temperature (float): Temperature scaling factor for the softmax.
+
+    Returns:
+        torch.Tensor: Computed Sparse NRE loss.
+    """
+    # Extract matched descriptors
+    desc1 = torch.stack([descriptors1[i] for i, _ in matches])  # (M x D)
+    desc2 = torch.stack([descriptors2[j] for _, j in matches])  # (M x D)
+
+    # Compute similarity matrix
+    similarity_matrix = torch.matmul(desc1, desc2.t())  # (M x M)
+
+    # Apply temperature scaling
+    similarity_matrix /= temperature
+
+    # Create ground truth labels
+    labels = torch.arange(len(matches), device=descriptors1.device)
+
+    # Compute cross-entropy loss
+    loss = F.cross_entropy(similarity_matrix, labels)
+
+    return loss
+
