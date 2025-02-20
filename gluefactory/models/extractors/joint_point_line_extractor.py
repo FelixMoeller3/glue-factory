@@ -8,7 +8,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from kornia.geometry.transform import warp_perspective
 from omegaconf import OmegaConf
-from gluefactory.geometry.desc_losses import caps_window_loss
 from gluefactory.models.utils.metrics_lines import get_rep_and_loc_error
 from gluefactory.datasets.homographies_deeplsd import sample_homography
 from gluefactory.models import get_model
@@ -613,7 +612,7 @@ class JointPointLineDetectorDescriptor(BaseModel):
         losses["line_distancefield"] = line_df_loss
         if self.conf.training.two_view:
             # In case of two-view, add df consistency loss
-            warped_df = warp_perspective(pred["view1"]["line_distancefield"],torch.linalg.inv(H))
+            warped_df = warp_perspective(pred["view1"]["line_distancefield"],torch.linalg.inv(H), tuple(pred["line_distancefield"].shape[1:]))
             losses["line_distancefield"] += F.l1_loss(
                 self.normalize_df(pred["line_distancefield"]) * gt_mask * padding_mask,
                 self.normalize_df(warped_df) * gt_mask * padding_mask,
@@ -795,9 +794,7 @@ class JointPointLineDetectorDescriptor(BaseModel):
         with torch.no_grad():
             warped_outputs = self({"image": warped_imgs})
         return warped_outputs, Hs
-    
-    import torch
-import torch.nn.functional as F
+
 
 def compute_matches(keypoints_im1: torch.Tensor, keypoints_im2: torch.Tensor, H: torch.Tensor) -> torch.Tensor:
     warped_points = warp_points(keypoints_im2,torch.linalg.inv(H))
@@ -824,6 +821,9 @@ def sparse_nre_loss(descriptors1: torch.Tensor, descriptors2: torch.Tensor, matc
 
     # Compute similarity matrix
     similarity_matrix = torch.matmul(desc1, desc2.t())  # (M x M)
+
+    # subtract 1 (as in paper)
+    similarity_matrix -= 1
 
     # Apply temperature scaling
     similarity_matrix /= temperature
