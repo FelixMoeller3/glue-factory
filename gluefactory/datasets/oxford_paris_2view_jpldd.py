@@ -58,8 +58,8 @@ def plot_predictions(pred, data):
     
     # read ground truth
     kp_0 = data["view0"]["cache"]["keypoints"][0].cpu().numpy()
-    kp_heatmap0 = data["view0"]["cache"]["keypoint_heatmap"][0].cpu().numpy()
-    df_0 = data["view0"]["cache"]["df"][0].cpu().numpy()
+    kp_heatmap0 = data["view0"]["cache"]["superpoint_heatmap"][0].cpu().numpy()
+    df_0 = data["view0"]["cache"]["deeplsd_distance_field"][0].cpu().numpy()
 
     # read predictions
     kp_jpl = pred["keypoints0"][0].cpu().numpy()
@@ -187,7 +187,7 @@ class _Dataset(torch.utils.data.Dataset):
     def _check_gt_exists(self):
         new_img_path_list = []
 
-        for img_path in self.image_sub_paths:
+        for img_path in self.image_names:
 
             full_artificial_img_path = self.image_dir / img_path
             img_folder = (
@@ -196,13 +196,16 @@ class _Dataset(torch.utils.data.Dataset):
             keypoint_file = img_folder / "keypoint_scores.npy"
             af_file = img_folder / "angle.jpg"
             df_file = img_folder / "df.jpg"
+            img_file = img_folder / "base_image.jpg"
 
 
-            if keypoint_file.exists() and af_file.exists() and df_file.exists():
+            if keypoint_file.exists() and af_file.exists() and df_file.exists() and img_file.exists():
                 new_img_path_list.append(img_path)
+            else:
+                logging.warning(f"GT files not found for {img_file}")
 
-        self.image_sub_paths = new_img_path_list
-        logger.info(f"NUMBER OF IMAGES WITH GT: {len(self.image_sub_paths)}")
+        logger.info(f"NUMBER OF IMAGES WITH GT: {len(new_img_path_list)}")
+        return new_img_path_list
 
 
     def _transform_keypoints(self, features, data):
@@ -356,7 +359,7 @@ class _Dataset(torch.utils.data.Dataset):
                 heatmap[integer_kp_coordinates[:, 1], integer_kp_coordinates[:, 0]] = 1.0
             heatmap = torch.from_numpy(heatmap).to(dtype=torch.float32)
 
-            features["keypoint_heatmap"] = heatmap
+            features["superpoint_heatmap"] = heatmap
 
             # Load pickle file for DF max and min values
             with open(img_folder / "values.pkl", "rb") as f:
@@ -408,8 +411,8 @@ class _Dataset(torch.utils.data.Dataset):
             # )
 
             # Add the warped features to the dictionary
-            features["df"] = torch.from_numpy(warped_df).to(dtype=torch.float32)
-            features["line_level"] = torch.from_numpy(warped_angle).to(dtype=torch.float32)
+            features["deeplsd_distance_field"] = torch.from_numpy(warped_df).to(dtype=torch.float32)
+            features["deeplsd_angle_field"] = torch.from_numpy(warped_angle).to(dtype=torch.float32)
             # features["line_level"] = (
             #     torch.from_numpy(warped_direction_field)
             #     .to(dtype=torch.float32)
