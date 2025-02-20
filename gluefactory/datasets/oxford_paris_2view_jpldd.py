@@ -63,7 +63,7 @@ def plot_predictions(pred, data):
 
     # read predictions
     kp_jpl = pred["keypoints0"][0].cpu().numpy()
-    df_jpl = pred["df0"][0].cpu().numpy()
+    df_jpl = pred["line_distancefield0"][0].cpu().numpy()
     kp_heatmap_jpl = pred["keypoint_and_junction_score_map0"][0].cpu().numpy()
 
     # plot predictions
