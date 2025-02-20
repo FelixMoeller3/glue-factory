@@ -28,9 +28,18 @@ from gluefactory.models.utils.metrics_lines import (
     compute_loc_error,
     compute_repeatability,
 )
+
+from gluefactory.visualization.viz2d import (
+    plot_images,
+    plot_keypoints,
+    plot_lines,
+    save_plot,
+)
+
 from gluefactory.settings import EVAL_PATH
 from gluefactory.utils.export_predictions import export_predictions
 from gluefactory.utils.tensor import map_tensor
+from gluefactory.utils.warp import warp_points
 from gluefactory.visualization.viz2d import plot_images, plot_lines, save_plot
 
 
@@ -41,8 +50,8 @@ class ScannetPipeline(EvalPipeline):
             "name": "scannet_1500",
             "num_workers": 1,
             "preprocessing": {
-                "resize": 480,  # we also resize during eval to have comparable metrics
-                "side": "short",
+                "resize": 800,# we also resize during eval to have comparable metrics
+                "side": "long",
             },
         },
         "model": {
@@ -54,6 +63,7 @@ class ScannetPipeline(EvalPipeline):
             "estimator": "poselib",
             "ransac_th": 1.0,  # -1 runs a bunch of thresholds and selects the best
         },
+        "pose_estimator": "poselib",
         "use_points": True,
         "use_lines": False,
         "repeatability_th": [1, 3, 5],
@@ -212,7 +222,6 @@ class ScannetPipeline(EvalPipeline):
     @classmethod
     def get_dataloader(self, data_conf=None):
         data_conf = data_conf if data_conf else self.default_conf["data"]
-        print(data_conf)
         dataset = get_dataset("scannet_1500")(data_conf)
         return dataset.get_data_loader("test")
 
@@ -252,10 +261,24 @@ class ScannetPipeline(EvalPipeline):
         )
 
         f = {}
+        r = {}
         if not exists_eval(experiment_dir) or overwrite_eval or overwrite:
             s, f, r = self.run_eval(self.get_dataloader(), pred_file, plot)
-            # save_eval(experiment_dir, s, f, r)
-        # s, r = load_eval(experiment_dir)
+            json.dump(
+                s,
+                open(
+                    os.path.join(
+                        experiment_dir,
+                        f'{name}_{self.conf["pose_estimator"]}_summary.json',
+                    ),
+                    "w",
+                ),
+                indent=2,
+            )
+        s = json.load(open(os.path.join(
+                        experiment_dir,
+                        f'{name}_{self.conf["pose_estimator"]}_summary.json',
+                    ), "r"))
         return s, f, r
 
     def run_eval(
@@ -269,11 +292,12 @@ class ScannetPipeline(EvalPipeline):
 
         for i, data in enumerate(tqdm(loader)):
 
+
             pred = cache_loader(data)
-            # pred['K0'] = data['K0']
-            # pred['K1'] = data['K1']
-            all_matches.append({"mkpts0": pred['keypoints0'][pred['matches0']],
-                                "mkpts1": pred['keypoints1'][pred['matches1']],
+            m0 = pred['matches0'] > -1
+            m1 = pred['matches0'][m0]
+            all_matches.append({"mkpts0": warp_points(pred['keypoints0'][m0].numpy(), data['H_0'].inverse().numpy()).reshape(-1, 2),
+                                "mkpts1": warp_points(pred['keypoints1'][m1].numpy(), data['H_1'].inverse().numpy()).reshape(-1, 2),
                                 "K0": data['K0'], "K1": data['K1'],
                                 "T_0to1": data["T_0to1"]})
         
@@ -281,13 +305,8 @@ class ScannetPipeline(EvalPipeline):
         accs_by_thresh = {}
         for ransac_thresh in self.conf["ransac_thresholds"]:
 
-            # fname = os.path.join(
-            #     self.conf["output"],
-            #     f'{name}_{self.conf["eval"]["estimator"]}_{ransac_thresh}.txt',
-            # )
             
             errors = []
-            # pairs = self.pairs
 
             # do the benchmark in parallel
             if self.conf["data"]["num_workers"] != 1:
@@ -320,7 +339,6 @@ class ScannetPipeline(EvalPipeline):
                         R, t, inliers = ret
                         pair = all_matches[pair_idx]
                         err_t, err_R = self.compute_pose_error(pair["T_0to1"][0], R, t)
-                    # errors_file.write(f"{err_t} {err_R}\n")
                     errors.append([err_t, err_R])
             # do the benchmark in serial
             else:
@@ -340,13 +358,10 @@ class ScannetPipeline(EvalPipeline):
                     else:
                         R, t, inliers = ret
                         err_t, err_R = self.compute_pose_error(pair["T_0to1"][0], R, t)
-                    # errors_file.write(f"{err_t} {err_R}\n")
-                    # errors_file.flush()
                     errors.append([err_t, err_R])
 
-                # errors_file.close()
-
             # compute AUCs
+            
             errors = np.array(errors)
             errors = errors.max(axis=1)
             aucs = self.pose_auc(errors, self.conf["pose_thresholds"])
@@ -362,87 +377,8 @@ class ScannetPipeline(EvalPipeline):
                 "aucs_by_thresh": aucs_by_thresh,
                 "accs_by_thresh": accs_by_thresh,
             }
-            # json.dump(
-            #     summary,
-            #     open(
-            #         os.path.join(
-            #             self.config["output"],
-            #             f'{name}_{self.config["pose_estimator"]}_summary.json',
-            #         ),
-            #         "w",
-            #     ),
-            #     indent=2,
-            # )
         figures = {}
         return summary, figures, figures
-        for i, data in enumerate(tqdm(loader)):
-            # if i in range(360,365):
-            #     continue
-            pred = cache_loader(data)
-            # Remove batch dimension
-            data = map_tensor(data, lambda t: torch.squeeze(t, dim=0))
-            # add custom evaluations here
-
-            results_i = {}
-
-            # # we also store the names for later reference
-            # results_i["names"] = data["name"][0]
-            # results_i["scenes"] = data["scene"][0]
-
-            if "lines0" in pred:
-                lines0 = pred["lines0"].cpu()
-                lines1 = pred["lines1"].cpu()
-
-                if plot:
-                    plot_images(
-                        [
-                            data["view0"]["image"].permute(1, 2, 0),
-                            data["view1"]["image"].permute(1, 2, 0),
-                        ],
-                        ["H0", "H1"],
-                    )
-                    plot_lines(lines=[pred["orig_lines0"], pred["orig_lines1"]])
-                    save_plot(os.path.join("./match_score/", f"{i}.jpg"))
-                    plt.close()
-
-                results_i["repeatability"] = compute_repeatability(
-                    lines0,
-                    lines1,
-                    pred["line_matches0"].cpu(),
-                    pred["line_matches1"].cpu(),
-                    pred["line_matching_scores0"].cpu(),
-                    self.conf.repeatability_th,
-                    rep_type="num",
-                )
-                results_i["loc_error"] = compute_loc_error(
-                    pred["line_matching_scores0"].cpu(), self.conf.num_lines_th
-                )
-                results_i["num_lines"] = (lines0.shape[0] + lines1.shape[0]) / 2
-
-            for k, v in results_i.items():
-                results[k].append(v)
-
-        # summarize results as a dict[str, float]
-        # you can also add your custom evaluations here
-        summaries = {}
-        for k, v in results.items():
-            arr = np.array(v)
-            if not np.issubdtype(np.array(v).dtype, np.number):
-                continue
-            summaries[f"m{k}"] = round(np.median(arr), 3)
-
-        if "repeatability" in results.keys():
-            for i, th in enumerate(self.conf.repeatability_th):
-                cur_nums = list(map(lambda x: x[i], results["repeatability"]))
-                summaries[f"repeatability@{th}px"] = round(np.median(cur_nums), 3)
-        if "loc_error" in results.keys():
-            for i, th in enumerate(self.conf.num_lines_th):
-                cur_nums = list(map(lambda x: x[i], results["loc_error"]))
-                summaries[f"loc_error@{th}lines"] = round(np.median(cur_nums), 3)
-
-        figures = {}
-
-        return summaries, figures, results
 
 
 if __name__ == "__main__":
@@ -476,7 +412,3 @@ if __name__ == "__main__":
 
     # print results
     pprint(s)
-    if args.plot:
-        for name, fig in f.items():
-            fig.canvas.manager.set_window_title(name)
-        plt.show()

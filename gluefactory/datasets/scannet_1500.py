@@ -52,7 +52,7 @@ class scannet_1500(BaseDataset, torch.utils.data.Dataset):
         "scannet_path": "Scannet-Xfeat/ScanNet1500/",
         "gt_path": "Scannet-Xfeat/ScanNet1500/test.npz",
         "subset": None,
-        "cache_images": True,
+        "cache_images": False,
         "preprocessing": ImagePreprocessor.default_conf,
         "grayscale": False,
     }
@@ -84,10 +84,6 @@ class scannet_1500(BaseDataset, torch.utils.data.Dataset):
     def _read_image(self, path):
         img = load_image(path, self.conf.grayscale)
         return self.preprocessor(img)
-        # if self.config["cache_images"]:
-        #     return self.preprocessor(self.image_cache[path])
-        # else:
-        #     return self.preprocessor(cv2.imread(path))
         
     def get_dataset(self, split):
         assert split in ["val", "test"]
@@ -98,7 +94,7 @@ class scannet_1500(BaseDataset, torch.utils.data.Dataset):
         gt_poses = np.load(self.gt)
         names = gt_poses["name"]
 
-        for i in range(50):
+        for i in range(len(names)):
             scene_id = names[i, 0]
             scene_idx = names[i, 1]
             scene = f"scene{scene_id:04d}_{scene_idx:02d}"
@@ -178,8 +174,14 @@ class scannet_1500(BaseDataset, torch.utils.data.Dataset):
         # H = data1["transform"] @ self.pairs[idx]["T_0to1"].astype(np.float32) @ np.linalg.inv(data0["transform"])
         H = self.pairs[idx]["T_0to1"].astype(np.float32)
 
+        # print( data0["transform"])
+        assert (data0['transform'] == data1['transform']).all()
+
+        # print(data0['transform'].shape)
         return {
             "T_0to1": H,
+            "H_0": data0["transform"],
+            "H_1": data1["transform"],
             "scene": idx,
             "idx": idx,
             "name": f"{idx}/{idx}.ppm",
