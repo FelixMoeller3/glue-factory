@@ -556,7 +556,7 @@ class JointPointLineDetectorDescriptor(BaseModel):
         metrics = {}
 
         prediction_dict = pred['view0'] if self.conf.training.two_view else pred
-        gt_dict = data["view0"] if self.conf.training.two_view else data
+        gt_dict = data["view0"]["cache"] if self.conf.training.two_view else data
         H = data["H_0to_1"] if self.conf.training.two_view else None
 
         # define padding mask which is only ones if no padding is used -> makes loss compatible with any scaling technique and whether padding is used or not
