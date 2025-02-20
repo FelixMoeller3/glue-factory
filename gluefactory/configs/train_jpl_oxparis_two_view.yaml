@@ -11,7 +11,7 @@ data:
         p: 0.75
     train_size: 11000
     val_size: 1000
-    batch_size: 16  # 16 per 10Gb of GPU mem
+    batch_size: 1  # 16 per 10Gb of GPU mem
     num_workers: 1
     load_features:
         do: True
