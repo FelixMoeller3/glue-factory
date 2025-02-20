@@ -1,59 +1,64 @@
 data:
-    name: homographies_point_line
-    data_dir: revisitop1m_POLD2
+    name: oxford_paris_2view_jpldd
+    data_dir: revisitop1m_POLD2/jpg
     grayscale: False
     triplet: False
     homography:
       difficulty: 0.5
       max_angle: 30
-      patch_shape: [320, 240]
+      patch_shape: [640, 480]
     photometric:
         p: 0.75
     train_size: 11000
     val_size: 1000
-    glob: ['*.jpg']
     batch_size: 16  # 16 per 10Gb of GPU mem
     num_workers: 1
     load_features:
         do: True
-        path: exports/revisitop1m_ha3/{scene}.h5
-        thresh: 0.005
-        max_num_keypoints: 1000
+        thresh: 0.0
+        max_num_keypoints: 500
         force_num_keypoints: True
+        point_gt:
+            use_score_heatmap: True
+        check_exists: True
     seed: 0
 model:
-    name: joint_point_line_extractor
-    model_name: "aliked-n16"
-    line_neighborhood: 5
-    max_num_keypoints: 1000  # setting for training, for eval: -1
-    subpixel_refinement: True
-    use_line_anglefield: False   # if set to false, model will be initialized without AF branch and AF will not be output or considered in inference or training
-                                # In that case make sure the line detection does not expect AF input!
-    line_df_decoder_channels: 64  # number of channels in CNN for af/df decoder branches
-    line_af_decoder_channels: 64
-    training:
-        do: True
-        two_view: True
-        aliked_pretrained: True
-        pretrain_kp_decoder: True
-        train_descriptors:
-            do: True # if train is True, initialize ALIKED Light model form OTF Descriptor GT
-            gt_aliked_model: "aliked-n32"
-        loss:
-            kp_loss_name: "focal_loss"
-            kp_loss_parameters:
-                lambda_weighted_bce: 200
-                focal_alpha: 0.25
-                focal_gamma: 2
-            loss_weights:
-                line_af_weight: 1
-                line_df_weight: 1
-                keypoint_weight: 1
-                descriptor_loss: 1
-    line_detection:
-      do: False
-    checkpoint: null  # if given load model weights from this checkpoint
-    timeit: False  # override timeit: False from BaseModel
+    name: two_view_pipeline
+    extractor:
+        name: joint_point_line_extractor
+        model_name: "aliked-n16"
+        line_neighborhood: 5
+        max_num_keypoints: 1000  # setting for training, for eval: -1
+        subpixel_refinement: True
+        use_line_anglefield: False   # if set to false, model will be initialized without AF branch and AF will not be output or considered in inference or training
+                                    # In that case make sure the line detection does not expect AF input!
+        line_df_decoder_channels: 64  # number of channels in CNN for af/df decoder branches
+        line_af_decoder_channels: 64
+        training:
+            do: True
+            two_view: True
+            aliked_pretrained: True
+            pretrain_kp_decoder: True
+            train_descriptors:
+                do: True # if train is True, initialize ALIKED Light model form OTF Descriptor GT
+                gt_aliked_model: "aliked-n32"
+            loss:
+                kp_loss_name: "focal_loss"
+                kp_loss_parameters:
+                    lambda_weighted_bce: 200
+                    focal_alpha: 0.25
+                    focal_gamma: 2
+                loss_weights:
+                    line_af_weight: 1
+                    line_df_weight: 1
+                    keypoint_weight: 1
+                    descriptor_loss: 1
+        line_detection:
+            do: False
+        checkpoint: null  # if given load model weights from this checkpoint
+        timeit: False  # override timeit: False from BaseModel
+        trainable: True
+
 train:
     load_experiment: null  # initialize the model from a previous experiment (take weights)
     seed: 7
@@ -72,4 +77,5 @@ train:
             patience: 5
     keep_last_checkpoints: 5
     submodules: []
+    plot: [4, 'gluefactory.datasets.oxford_paris_2view_jpldd.plot_predictions']
 
