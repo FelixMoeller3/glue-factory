@@ -411,6 +411,7 @@ class _Dataset(torch.utils.data.Dataset):
             # )
 
             # Add the warped features to the dictionary
+            features["deeplsd_offset_field"] = torch.from_numpy(warped_offset).to(dtype=torch.float32)
             features["deeplsd_distance_field"] = torch.from_numpy(warped_df).to(dtype=torch.float32)
             features["deeplsd_angle_field"] = torch.from_numpy(warped_angle).to(dtype=torch.float32)
             # features["line_level"] = (
