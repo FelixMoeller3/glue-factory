@@ -1,6 +1,4 @@
 import cv2
-import numpy as np
-import pytlbd
 
 ETH_EPS = 1e-10
 
