@@ -544,24 +544,25 @@ class JointPointLineDetectorDescriptor(BaseModel):
         loss = target * pos_part + (1 - target) * neg_part
         return loss
     
-    def warp_data(self, df, offset, H, ps: list):
-        h, w = offset.shape[1:3]
+    def warp_data(self, df, angle, H, ps: list):
+        h, w = df.shape[1:3]
         ps = tuple(ps)
 
         # Warp the closest point on a line
         pix_loc = torch.stack(
             torch.meshgrid(torch.arange(h), torch.arange(w), indexing="ij"), dim=-1
-        ).to(offset.device).float()
+        ).to(df.device).float()
 
         warped_dfs = []
 
         for i in range(df.shape[0]):
-            
-            closest = pix_loc + offset[i]
+            with torch.no_grad():
+                offset = df[i][:,:,None] * torch.stack([torch.sin(angle[i]), torch.cos(angle[i])], dim=-1)
+            closest = pix_loc + offset
             warped_closest = warp_points_torch(closest.reshape(-1, 2), H, inverse=False).reshape(h, w, 2)
             warped_pix_loc = warp_points_torch(pix_loc.reshape(-1, 2), H, inverse=False).reshape(h, w, 2)
             
-            offset_norm = torch.linalg.norm(offset[i], dim=-1)
+            offset_norm = torch.linalg.norm(offset, dim=-1)
             zero_offset = offset_norm < 1e-3
             offset_norm[zero_offset] = 1
             scaling = torch.linalg.norm(warped_closest - warped_pix_loc, dim=-1) / offset_norm
@@ -661,7 +662,7 @@ class JointPointLineDetectorDescriptor(BaseModel):
             # In case of two-view, add df consistency loss
             warped_df = self.warp_data(
                 df = pred["line_distancefield1"],
-                offset = data["view1"]["cache"]["deeplsd_offset_field"],
+                angle = data["view1"]["cache"]["deeplsd_angle_field"],
                 H = torch.linalg.inv(H),
                 ps = tuple(pred["line_distancefield0"].shape[1:])
             )
