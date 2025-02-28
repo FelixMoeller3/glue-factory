@@ -11,6 +11,9 @@ import torchvision
 from torch import nn
 from torch.nn.modules.utils import _pair
 from torchvision.models import resnet
+from dcnv4 import (
+    DCNv4
+)
 
 aliked_cfgs = {
     "aliked-t16": {
@@ -63,7 +66,7 @@ class AlikedEncoder(nn.Module):
             conf["c4"],
             conf["dim"],
         )
-        conv_types = ["conv", "conv", "dcn", "dcn"]
+        conv_types = ["conv", "conv", "dcn_v4", "dcn_v4"]
         mask = False
 
         # build model
@@ -230,6 +233,18 @@ def get_conv(
             bias=bias,
             mask=mask,
         )
+    elif conv_type == "dcn_v4":
+        conv = nn.Sequential([
+            DCNv4(
+                channels=inplanes,
+                kernel_size=kernel_size,
+                stride=stride,
+                pad=padding,
+                group=1,
+                bias=bias
+            ),
+            nn.Conv2d(inplanes, planes, kernel_size=1)
+        ])
     else:
         raise TypeError
     return conv
