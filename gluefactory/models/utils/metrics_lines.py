@@ -3,7 +3,6 @@ import torch
 from scipy.optimize import linear_sum_assignment
 
 from gluefactory.datasets.homographies_deeplsd import warp_lines, warp_points
-from gluefactory.models.lines.lbd import PyTLBD
 from gluefactory.models.lines.line_distances import (
     angular_distance,
     get_area_line_dist,
@@ -12,7 +11,7 @@ from gluefactory.models.lines.line_distances import (
     get_structural_line_dist,
     overlap_distance_sym,
 )
-from gluefactory.models.lines.line_utils import get_common_lines
+from gluefactory.models.lines.line_utils import get_common_lines, estimate_homography
 
 NUM_LINES_THRESHOLDS = [10, 25, 50, 100, 300]
 PIXEL_THRESHOLDS = [1, 2, 3, 4, 5]
@@ -57,7 +56,6 @@ def get_rep_and_loc_error(
                 )
             )
             struct_loc_error.append(compute_loc_error(distances, num_lines_thres))
-    num_lines = np.mean(num_lines)
     repeatability = np.mean(np.stack(struct_rep, axis=0), axis=0)
     loc_error = np.mean(np.stack(struct_loc_error, axis=0), axis=0)
     return repeatability, loc_error
