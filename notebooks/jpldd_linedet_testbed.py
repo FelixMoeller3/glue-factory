@@ -52,7 +52,7 @@ jpldd_conf = {
             "samples": [24],
             "distance_map": {
                 "max_value": 5,
-                "threshold": 0.45,
+                "threshold": 0.5,
                 "smooth_threshold": 0.8,
                 "avg_filter_size": 13,
                 "avg_filter_padding": 6,
@@ -63,6 +63,7 @@ jpldd_conf = {
             "brute_force_df": {
                 "use": True,  # Use brute force sampling for distance field in the second stage
                 "image_size": 800,  # Image size for which the coefficients are generated
+                "binary_threshold": 0.5,
                 "inlier_ratio": 0.8,  # Ratio of inliers
                 "max_accepted_mean_value": 0.3,  # Maximum accepted DF mean value along the line
             },
