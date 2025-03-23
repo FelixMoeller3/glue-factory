@@ -754,7 +754,7 @@ class LineExtractor(BaseModel):
 
         return indices_image
     
-    def candidate_suppression(self, junctions, candidate_map):
+    def candidate_suppression(self, junctions: torch.tensor, candidate_map: torch.tensor):
         """ Suppress overlapping long lines in the candidate segments. """
         # Define the distance tolerance
         dist_tolerance = self.conf.nms_dist_tolerance

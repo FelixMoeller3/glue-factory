@@ -7,6 +7,7 @@ from omegaconf import OmegaConf
 import cv2
 import numpy as np
 import torch
+import torch.nn as nn
 
 from gluefactory.models.deeplsd_inference import DeepLSD
 
@@ -38,7 +39,7 @@ def initialize_model(device, conf):
 
     return deeplsd_net
 
-def get_binary_line_heatmap(image_path, model, device):
+def get_binary_line_heatmap(image_path:Path, model: nn.module, device: torch.device):
     gray_img = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
     with torch.no_grad():
         inputs = {
