@@ -54,7 +54,6 @@ class LineExtractor(BaseModel):
             "max_accepted_mean_value": 0.1,  # Maximum difference in AF mean value with line angle
         },
         "brute_force_df": {
-            "use": False,  # Use brute force sampling for distance field in the second stage
             "image_size": 800,  # Image size for which the coefficients are generated
             "binary_threshold": 0.3,  # Threshold for binary distance map
             "inlier_ratio": 0.8,  # Ratio of inliers
@@ -106,7 +105,7 @@ class LineExtractor(BaseModel):
         self.indices = indices
 
         # Brute force sampling for distance field
-        if conf.brute_force_df is not None and conf.brute_force_df.use:
+        if conf.brute_force_df is not None and conf.filters.brute_force_df:
             self.brute_force_df = True
             image_size = conf.brute_force_df.image_size
             max_line_length = np.sqrt(2 * image_size**2).astype(int)
@@ -735,7 +734,7 @@ class LineExtractor(BaseModel):
                     )
 
         # Strong filter - brute force sampling for distance field
-        if self.conf.brute_force_df is not None and self.conf.brute_force_df.use:
+        if self.conf.brute_force_df is not None and self.conf.filters.brute_force_df:
             indices_image = self.brute_force_filter_with_distance_field(
                 points, binary_distance_map, distance_map, indices_image
             )
