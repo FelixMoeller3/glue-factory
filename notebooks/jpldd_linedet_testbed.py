@@ -106,10 +106,10 @@ jpldd_conf = {
             "nms": False,
             "debug": True,
             "debug_dir": DEBUG_DIR,
-            # "device": "cpu"
+            "device": "cpu"
         },
     },
-    "checkpoint": "/local/home/Point-Line/outputs/training/oxparis_800_focal/checkpoint_best.tar",
+    "checkpoint": "outputs/training/oxparis_800_focal/checkpoint_best.tar",
 }
 
 dset_conf = {
@@ -240,7 +240,7 @@ os.makedirs(f"{DEBUG_DIR}", exist_ok=True)
 if torch.cuda.is_available():
     device = "cuda"
 elif torch.backends.mps.is_built():
-    device = "mps"
+    device = "cpu"
 else:
     device = "cpu"
 print(f"Device Used: {device}")

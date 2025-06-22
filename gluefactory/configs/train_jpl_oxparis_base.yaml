@@ -20,7 +20,6 @@ data:
             load_points: False
             use_score_heatmap: False
             max_num_keypoints: 63  # how many gt keypoints are loaded (could be used for kp losses later on). The heatmap is generated with all kp anyway. max num is needed for batching.
-            max_num_heatmapo_keypoints: -1
             use_deeplsd_lineendpoints_as_kp_gt: False  # set true to use deep-lsd line endpoints as keypoint groundtruth
             use_superpoint_kp_gt: True  # set true to use default HA-Superpoint groundtruth
         line_gt:

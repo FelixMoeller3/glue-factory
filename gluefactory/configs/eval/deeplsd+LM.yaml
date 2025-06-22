@@ -9,7 +9,7 @@ model:
                 merge: False
                 grad_nfa: True
                 filtering: True  # True or strict
-                faster_lsd: False
+                faster_lsd: True
 
     matcher:
         name: matchers.line_matcher

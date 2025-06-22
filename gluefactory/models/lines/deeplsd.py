@@ -34,7 +34,7 @@ class DeepLSD(BaseModel):
         ckpt = DATA_PATH / "weights/deeplsd_md.tar"
         if not ckpt.is_file():
             self.download_model(ckpt)
-        ckpt = torch.load(ckpt, map_location="cpu")
+        ckpt = torch.load(ckpt, map_location="cpu", weights_only=False)
         self.net = deeplsd_inference.DeepLSD(conf.model_conf).eval()
         self.net.load_state_dict(ckpt["model"])
         self.set_initialized()
