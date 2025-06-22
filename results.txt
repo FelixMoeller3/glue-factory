@@ -1,0 +1,364 @@
+250000 - stride 2 - with gaussian - 16 threads - last commit
+
+{'loc_error@10lines': 0.2160000056028366,
+ 'loc_error@300lines': 1.4529999494552612,
+ 'loc_error@50lines': 0.5879999995231628,
+ 'mH_err@1': 0.55,
+ 'mH_err@3': 0.865,
+ 'mH_err@5': 0.896,
+ 'mloc_error': 0.6309999823570251,
+ 'mnum_lines': 229.75,
+ 'mrepeatability': 0.48500001430511475,
+ 'repeatability@1px': 0.257999986410141,
+ 'repeatability@3px': 0.5189999938011169,
+ 'repeatability@5px': 0.6029999852180481}
+
+
+// Last commit - no gaussian - stride 1 -  1 thread - no early stop
+
+constexpr bool with_gaussian = false;
+
+constexpr unsigned int stride_ll_angle_x = 1;
+constexpr unsigned int stride_ll_angle_y = 1;
+constexpr unsigned int numberThreads = 1;
+constexpr unsigned int early_stop_iterations = INT_MAX;
+
+ {'loc_error@10lines': 0.234,
+ 'loc_error@300lines': 1.431,
+ 'loc_error@50lines': 0.688,
+ 'mH_err@1': 0.509,
+ 'mH_err@3': 0.841,
+ 'mH_err@5': 0.889,
+ 'mloc_error': 0.688,
+ 'mnum_lines': 188.75,
+ 'mrepeatability': 0.4970000088214874,
+ 'repeatability@1px': 0.26899999380111694,
+ 'repeatability@3px': 0.5320000052452087,
+ 'repeatability@5px': 0.6110000014305115}
+
+// Commit de Rémi + bugfix - single thread
+
+{'loc_error@10lines': 0.201,
+ 'loc_error@300lines': 1.424,
+ 'loc_error@50lines': 0.553,
+ 'mH_err@1': 0.572,
+ 'mH_err@3': 0.874,
+ 'mH_err@5': 0.904,
+ 'mloc_error': 0.6,
+ 'mnum_lines': 244.25,
+ 'mrepeatability': 0.5,
+ 'repeatability@1px': 0.2709999978542328,
+ 'repeatability@3px': 0.5429999828338623,
+ 'repeatability@5px': 0.6150000095367432}
+
+// Commit de Rémi + bugfix - 16 threads
+
+{'loc_error@10lines': 0.2,
+ 'loc_error@300lines': 1.434,
+ 'loc_error@50lines': 0.558,
+ 'mH_err@1': 0.55,
+ 'mH_err@3': 0.872,
+ 'mH_err@5': 0.902,
+ 'mloc_error': 0.609,
+ 'mnum_lines': 245.0,
+ 'mrepeatability': 0.49300000071525574,
+ 'repeatability@1px': 0.26499998569488525,
+ 'repeatability@3px': 0.5299999713897705,
+ 'repeatability@5px': 0.6129999756813049}
+
+ // Comment failing and multiple bug fixes - 1 thread
+
+ {'loc_error@10lines': 0.201,
+ 'loc_error@300lines': 1.424,
+ 'loc_error@50lines': 0.553,
+ 'mH_err@1': 0.572,
+ 'mH_err@3': 0.874,
+ 'mH_err@5': 0.904,
+ 'mloc_error': 0.6,
+ 'mnum_lines': 244.25,
+ 'mrepeatability': 0.5,
+ 'repeatability@1px': 0.2709999978542328,
+ 'repeatability@3px': 0.5419999957084656,
+ 'repeatability@5px': 0.6150000095367432}
+
+  // Comment failing and multiple bug fixes - 16 threads - stride 2
+
+  {'loc_error@10lines': 0.206,
+ 'loc_error@300lines': 1.462,
+ 'loc_error@50lines': 0.577,
+ 'mH_err@1': 0.557,
+ 'mH_err@3': 0.874,
+ 'mH_err@5': 0.904,
+ 'mloc_error': 0.623,
+ 'mnum_lines': 246.75,
+ 'mrepeatability': 0.47999998927116394,
+ 'repeatability@1px': 0.25699999928474426,
+ 'repeatability@3px': 0.5170000195503235,
+ 'repeatability@5px': 0.5989999771118164}
+
+ // RAII - 16 threads - stride 2
+
+ {'loc_error@10lines': 0.2070000022649765,
+ 'loc_error@300lines': 1.4780000448226929,
+ 'loc_error@50lines': 0.5799999833106995,
+ 'mH_err@1': 0.57,
+ 'mH_err@3': 0.876,
+ 'mH_err@5': 0.902,
+ 'mloc_error': 0.6209999918937683,
+ 'mnum_lines': 246.75,
+ 'mrepeatability': 0.48399999737739563,
+ 'repeatability@1px': 0.257999986410141,
+ 'repeatability@3px': 0.5180000066757202,
+ 'repeatability@5px': 0.5950000286102295}
+
+ // Declare and initialise at the same time - 16 threads - stride 2
+
+ {'loc_error@10lines': 0.204,
+ 'loc_error@300lines': 1.462,
+ 'loc_error@50lines': 0.57,
+ 'mH_err@1': 0.556,
+ 'mH_err@3': 0.87,
+ 'mH_err@5': 0.9,
+ 'mloc_error': 0.608,
+ 'mnum_lines': 246.0,
+ 'mrepeatability': 0.4830000102519989,
+ 'repeatability@1px': 0.25999999046325684,
+ 'repeatability@3px': 0.515999972820282,
+ 'repeatability@5px': 0.5979999899864197}
+
+// Next commit with code cleanup - 16 threads - stride 2 - 100k early stop
+
+{'loc_error@10lines': 0.20999999344348907,
+ 'loc_error@300lines': 1.4529999494552612,
+ 'loc_error@50lines': 0.5799999833106995,
+ 'mH_err@1': 0.561,
+ 'mH_err@3': 0.874,
+ 'mH_err@5': 0.902,
+ 'mloc_error': 0.6159999966621399,
+ 'mnum_lines': 246.0,
+ 'mrepeatability': 0.48500001430511475,
+ 'repeatability@1px': 0.2630000114440918,
+ 'repeatability@3px': 0.5180000066757202,
+ 'repeatability@5px': 0.5960000157356262}
+
+
+// Next commit with code cleanup - 1 threads - stride 1 - no early stop
+
+{'loc_error@10lines': 0.201,
+ 'loc_error@300lines': 1.424,
+ 'loc_error@50lines': 0.553,
+ 'mH_err@1': 0.572,
+ 'mH_err@3': 0.874,
+ 'mH_err@5': 0.904,
+ 'mloc_error': 0.6,
+ 'mnum_lines': 244.25,
+ 'mrepeatability': 0.5,
+ 'repeatability@1px': 0.2709999978542328,
+ 'repeatability@3px': 0.5429999828338623,
+ 'repeatability@5px': 0.6150000095367432}
+
+   // Next commit with code cleanup - 1 threads - stride 2 - no early stop
+
+{'loc_error@10lines': 0.202,
+ 'loc_error@300lines': 1.447,
+ 'loc_error@50lines': 0.557,
+ 'mH_err@1': 0.554,
+ 'mH_err@3': 0.872,
+ 'mH_err@5': 0.9,
+ 'mloc_error': 0.604,
+ 'mnum_lines': 243.0,
+ 'mrepeatability': 0.503000020980835,
+ 'repeatability@1px': 0.26499998569488525,
+ 'repeatability@3px': 0.5379999876022339,
+ 'repeatability@5px': 0.6150000095367432}
+
+  // Next commit with code cleanup - 1 threads - stride 2 - 100k early stop
+
+{'loc_error@10lines': 0.202,
+ 'loc_error@300lines': 1.447,
+ 'loc_error@50lines': 0.557,
+ 'mH_err@1': 0.554,
+ 'mH_err@3': 0.872,
+ 'mH_err@5': 0.9,
+ 'mloc_error': 0.604,
+ 'mnum_lines': 243.0,
+ 'mrepeatability': 0.503000020980835,
+ 'repeatability@1px': 0.26499998569488525,
+ 'repeatability@3px': 0.5379999876022339,
+ 'repeatability@5px': 0.6150000095367432}
+
+
+     // Next commit with code cleanup - 1 threads - stride 2 - 75k early stop
+
+{'loc_error@10lines': 0.202,
+ 'loc_error@300lines': 1.447,
+ 'loc_error@50lines': 0.557,
+ 'mH_err@1': 0.554,
+ 'mH_err@3': 0.872,
+ 'mH_err@5': 0.9,
+ 'mloc_error': 0.604,
+ 'mnum_lines': 243.0,
+ 'mrepeatability': 0.503000020980835,
+ 'repeatability@1px': 0.26499998569488525,
+ 'repeatability@3px': 0.5379999876022339,
+ 'repeatability@5px': 0.6150000095367432}
+ 
+ // Next commit with code cleanup - 1 threads - stride 2 - 50k early stop
+
+
+ {'loc_error@10lines': 0.202,
+ 'loc_error@300lines': 1.447,
+ 'loc_error@50lines': 0.557,
+ 'mH_err@1': 0.554,
+ 'mH_err@3': 0.872,
+ 'mH_err@5': 0.9,
+ 'mloc_error': 0.604,
+ 'mnum_lines': 243.0,
+ 'mrepeatability': 0.503000020980835,
+ 'repeatability@1px': 0.26499998569488525,
+ 'repeatability@3px': 0.5379999876022339,
+ 'repeatability@5px': 0.6150000095367432}
+
+// Next commit with code cleanup - 1 threads - stride 2 - 50k early stop + 16 threads first part
+
+{'loc_error@10lines': 0.202,
+ 'loc_error@300lines': 1.447,
+ 'loc_error@50lines': 0.557,
+ 'mH_err@1': 0.554,
+ 'mH_err@3': 0.872,
+ 'mH_err@5': 0.9,
+ 'mloc_error': 0.604,
+ 'mnum_lines': 243.0,
+ 'mrepeatability': 0.503000020980835,
+ 'repeatability@1px': 0.26499998569488525,
+ 'repeatability@3px': 0.5379999876022339,
+ 'repeatability@5px': 0.6150000095367432}
+
+
+ // Next commit with code cleanup - 1 threads - stride 2 - 10k early stop + 16 threads first part
+
+
+ {'loc_error@10lines': 0.204,
+ 'loc_error@300lines': 1.451,
+ 'loc_error@50lines': 0.583,
+ 'mH_err@1': 0.546,
+ 'mH_err@3': 0.872,
+ 'mH_err@5': 0.902,
+ 'mloc_error': 0.619,
+ 'mnum_lines': 237.0,
+ 'mrepeatability': 0.49300000071525574,
+ 'repeatability@1px': 0.2630000114440918,
+ 'repeatability@3px': 0.5320000052452087,
+ 'repeatability@5px': 0.6079999804496765}
+
+
+// Next commit with code cleanup - 4 threads - stride 2 - 10k early stop + 16 threads first part
+
+
+ {'loc_error@10lines': 0.206,
+ 'loc_error@300lines': 1.468,
+ 'loc_error@50lines': 0.581,
+ 'mH_err@1': 0.552,
+ 'mH_err@3': 0.872,
+ 'mH_err@5': 0.907,
+ 'mloc_error': 0.622,
+ 'mnum_lines': 238.0,
+ 'mrepeatability': 0.4869999885559082,
+ 'repeatability@1px': 0.257999986410141,
+ 'repeatability@3px': 0.5239999890327454,
+ 'repeatability@5px': 0.6019999980926514}
+
+
+ // Next commit with code cleanup - 2 threads - stride 2 - 10k early stop + 16 threads first part
+
+ {'loc_error@10lines': 0.206,
+ 'loc_error@300lines': 1.457,
+ 'loc_error@50lines': 0.586,
+ 'mH_err@1': 0.546,
+ 'mH_err@3': 0.872,
+ 'mH_err@5': 0.902,
+ 'mloc_error': 0.621,
+ 'mnum_lines': 237.5,
+ 'mrepeatability': 0.48899999260902405,
+ 'repeatability@1px': 0.2630000114440918,
+ 'repeatability@3px': 0.5270000100135803,
+ 'repeatability@5px': 0.6060000061988831}
+
+// Next commit with code cleanup - 2 threads - stride 2 - 50k early stop - 16 threads first part
+
+{'loc_error@10lines': 0.204,
+ 'loc_error@300lines': 1.452,
+ 'loc_error@50lines': 0.558,
+ 'mH_err@1': 0.563,
+ 'mH_err@3': 0.865,
+ 'mH_err@5': 0.893,
+ 'mloc_error': 0.609,
+ 'mnum_lines': 244.0,
+ 'mrepeatability': 0.49799999594688416,
+ 'repeatability@1px': 0.2630000114440918,
+ 'repeatability@3px': 0.5339999794960022,
+ 'repeatability@5px': 0.6110000014305115}
+
+ // Next commit with code cleanup - 2 threads - stride 2 - 25k early stop - 16 threads first part
+
+
+ {'loc_error@10lines': 0.203,
+ 'loc_error@300lines': 1.448,
+ 'loc_error@50lines': 0.563,
+ 'mH_err@1': 0.552,
+ 'mH_err@3': 0.874,
+ 'mH_err@5': 0.904,
+ 'mloc_error': 0.612,
+ 'mnum_lines': 244.0,
+ 'mrepeatability': 0.5,
+ 'repeatability@1px': 0.2639999985694885,
+ 'repeatability@3px': 0.5350000262260437,
+ 'repeatability@5px': 0.609000027179718}
+
+ // Next commit with code cleanup - 4 threads - stride 2 - 25k early stop - 16 threads first part
+
+{'loc_error@10lines': 0.203,
+ 'loc_error@300lines': 1.451,
+ 'loc_error@50lines': 0.564,
+ 'mH_err@1': 0.565,
+ 'mH_err@3': 0.87,
+ 'mH_err@5': 0.904,
+ 'mloc_error': 0.608,
+ 'mnum_lines': 244.0,
+ 'mrepeatability': 0.4970000088214874,
+ 'repeatability@1px': 0.2630000114440918,
+ 'repeatability@3px': 0.5339999794960022,
+ 'repeatability@5px': 0.6100000143051147}
+
+
+  // Next commit with code cleanup - 8 threads - stride 2 - 25k early stop - 16 threads first part
+
+
+  {'loc_error@10lines': 0.20800000429153442,
+ 'loc_error@300lines': 1.4539999961853027,
+ 'loc_error@50lines': 0.5759999752044678,
+ 'mH_err@1': 0.574,
+ 'mH_err@3': 0.876,
+ 'mH_err@5': 0.907,
+ 'mloc_error': 0.6150000095367432,
+ 'mnum_lines': 246.75,
+ 'mrepeatability': 0.4880000054836273,
+ 'repeatability@1px': 0.25999999046325684,
+ 'repeatability@3px': 0.5230000019073486,
+ 'repeatability@5px': 0.6060000061988831}
+
+
+   // Next commit with code cleanup - 16 threads - stride 2 - 25k early stop - 16 threads first part
+
+{'loc_error@10lines': 0.20999999344348907,
+ 'loc_error@300lines': 1.4769999980926514,
+ 'loc_error@50lines': 0.5709999799728394,
+ 'mH_err@1': 0.552,
+ 'mH_err@3': 0.869,
+ 'mH_err@5': 0.898,
+ 'mloc_error': 0.6309999823570251,
+ 'mnum_lines': 247.0,
+ 'mrepeatability': 0.47999998927116394,
+ 'repeatability@1px': 0.25699999928474426,
+ 'repeatability@3px': 0.5189999938011169,
+ 'repeatability@5px': 0.5960000157356262}
