@@ -18,8 +18,7 @@ from afm_op import afm
 
 from gluefactory.datasets import get_dataset
 from gluefactory.settings import EVAL_PATH
-from gluefactory.datasets.homographies_deeplsd import warp_lines
-# TODO: Is it correct to do this?
+from gluefactory.datasets.homographies_deeplsd import warp_lines, sample_homography
 from gluefactory.ground_truth_generation.superpoint_gt_multiple_files import  sample_homography
 from gluefactory.datasets.photometric_transforms import random_contrast
 
