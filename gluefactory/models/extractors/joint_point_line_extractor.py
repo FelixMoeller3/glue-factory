@@ -89,6 +89,7 @@ class JointPointLineDetectorDescriptor(BaseModel):
                     "descriptor_weight": 1,
                 },
             },
+            "tain_df_with_mask": False,
         },
         "line_detection": {  # by default we use the POLD2 Line Extractor (MLP with Angle Field)
             "do": True,
@@ -620,12 +621,20 @@ class JointPointLineDetectorDescriptor(BaseModel):
 
         # use normalized versions for loss
         gt_mask = data["deeplsd_distance_field"] < self.conf.line_neighborhood
+
+        distance_field_ground_truth = (
+            gt_mask * padding_mask
+            if self.conf.training.tain_df_with_mask
+            else self.normalize_df(data["deeplsd_distance_field"]) * gt_mask * padding_mask
+        )
+
         line_df_loss = F.l1_loss(
             self.normalize_df(pred["line_distancefield"]) * gt_mask * padding_mask,
-            self.normalize_df(data["deeplsd_distance_field"]) * gt_mask * padding_mask,
+            distance_field_ground_truth,
             # only supervise in line neighborhood
             reduction="none",
         ).mean(dim=(1, 2))
+
         losses["line_distancefield"] = line_df_loss
 
         # Compute overall loss
