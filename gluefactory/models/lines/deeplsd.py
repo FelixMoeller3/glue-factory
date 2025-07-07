@@ -15,10 +15,12 @@ class DeepLSD(BaseModel):
         "model_conf": {
             "detect_lines": False,
             "line_detection_params": {
+                "use_img_grad_angle": False,
                 "merge": False,
                 "grad_nfa": True,
                 "filtering": "normal",
                 "grad_thresh": 3,
+                "faster_lsd": False,
             },
         },
     }
@@ -32,7 +34,7 @@ class DeepLSD(BaseModel):
         ckpt = DATA_PATH / "weights/deeplsd_md.tar"
         if not ckpt.is_file():
             self.download_model(ckpt)
-        ckpt = torch.load(ckpt, map_location="cpu")
+        ckpt = torch.load(ckpt, map_location="cpu", weights_only=False)
         self.net = deeplsd_inference.DeepLSD(conf.model_conf).eval()
         self.net.load_state_dict(ckpt["model"])
         self.set_initialized()
@@ -93,13 +95,9 @@ class DeepLSD(BaseModel):
 
         # Batch if possible
         if len(image) == 1 or self.conf.force_num_lines:
-            lines = torch.tensor(lines, dtype=torch.float, device=image.device)
-            line_scores = torch.tensor(
-                line_scores, dtype=torch.float, device=image.device
-            )
-            valid_lines = torch.tensor(
-                valid_lines, dtype=torch.bool, device=image.device
-            )
+            lines = torch.from_numpy(np.stack(lines, axis=0)).to(image.device).float()
+            line_scores = torch.from_numpy(np.stack(line_scores, axis=0)).to(image.device).float()
+            valid_lines = torch.from_numpy(np.stack(valid_lines, axis=0)).to(image.device).bool()
 
         return {"lines": lines, "line_scores": line_scores, "valid_lines": valid_lines}
 
