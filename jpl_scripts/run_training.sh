@@ -1,7 +1,7 @@
 #!/bin/bash
 # TRAIN ON DLAB MACHINE
 #activates venv and runs training. Dont forget to activate tmux before
-# Cmd params 'run_training_dlab.sh [exp_name] [path to conf]'
+# Cmd params 'run_training.sh [exp_name] [path to conf]'
 
 echo "Exp-Name: $1"
 echo "Conf-Path: $2"

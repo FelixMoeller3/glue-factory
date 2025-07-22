@@ -6,7 +6,7 @@ data:
     train_batch_size: 8  # given for all gpus
     val_batch_size: 8
     prefetch_factor: 2
-    reshape: 800  # new resizing keeps aspect ratio so quadratic image is not guaranteed
+    reshape: 800  # new resizing keeps aspect-ratio so quadratic image is not guaranteed
     square_pad: True  # thus for a batchsize > 1 square padding needs to be activated for batching
     multiscale_learning:
         do: False  # to use multiscale training, reshape must be set to false
@@ -14,13 +14,13 @@ data:
         scale_selection: 'random' # random or round-robin
     load_features:
         do: True
-        check_exists: True
+        check_exists: True # check if gt files are existing for each image and filter out those for that this isn't the case
         point_gt:
             # ATTENTION: if deeplsd line ep are used as kp gt, using score heatmap is discouraged, as deeplsd does not assign scores to line ep and thus we set all to one
             load_points: False
-            use_score_heatmap: False
-            max_num_keypoints: 63  # how many gt keypoints are loaded (could be used for kp losses later on). The heatmap is generated with all kp anyway. max num is needed for batching.
-            max_num_heatmapo_keypoints: -1
+            use_score_heatmap: False # Use scores instead of just set kp location to 1 in the map
+            max_num_keypoints: 63  # how many gt keypoints are loaded (could be used for kp losses later on). Needed for batching.
+            max_num_heatmap_keypoints: -1 # number of gt keypoints used to create heatmap. Set to -1 to use all
             use_deeplsd_lineendpoints_as_kp_gt: False  # set true to use deep-lsd line endpoints as keypoint groundtruth
             use_superpoint_kp_gt: True  # set true to use default HA-Superpoint groundtruth
         line_gt:
@@ -35,29 +35,31 @@ model:
     name: joint_point_line_extractor
     model_name: "aliked-n16"
     line_neighborhood: 5
-    max_num_keypoints: 1500  # setting for training, for eval: -1
-    subpixel_refinement: True  # activate subpixel refinement in DKD
+    max_num_keypoints: 1000  # setting for training, for eval: -1
+    subpixel_refinement: True  # # if activated the DKD module will apply arg-softmax refinement of keypoint positions
     use_line_anglefield: False   # if set to false, model will be initialized without AF branch and AF will not be output or considered in inference or training
-                                # In that case make sure the line detection does not expect AF input!
     line_df_decoder_channels: 64  # number of channels in CNN for af/df decoder branches
     training:
         do: True
+        two_view: False
         aliked_pretrained: True
         pretrain_kp_decoder: True
         train_descriptors:
-            do: True # if train is True, initialize ALIKED Light model form OTF Descriptor GT
+            use_one_view_loss: True # train with direct supervision of descriptors with ground truth descriptors
             gt_aliked_model: "aliked-n32"
         loss:
+            use_one_view_df_loss: True
+            use_one_view_af_loss: False
             kp_loss_name: "focal_loss"
             kp_loss_parameters:
                 lambda_weighted_bce: 200
                 focal_alpha: 0.25
                 focal_gamma: 2
             loss_weights:
-                line_af_weight: 1
-                line_df_weight: 1
+                one_view_line_af_weight: 1
+                one_view_line_df_weight: 1
                 keypoint_weight: 1
-                descriptor_loss: 1
+                one_view_descriptor_weight: 1
     line_detection:
       do: False
     checkpoint: null  # if given load model weights from this checkpoint

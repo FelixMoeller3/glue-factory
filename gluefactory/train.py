@@ -16,15 +16,13 @@ from pydoc import locate
 import numpy as np
 import torch
 from omegaconf import OmegaConf
-from torch.cuda.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from . import __module_name__, logger
+from . import __module_name__, logger, settings
 from .datasets import get_dataset
 from .eval import run_benchmark
 from .models import get_model
-from .settings import EVAL_PATH, TRAINING_PATH
 from .utils.experiments import get_best_checkpoint, get_last_checkpoint, save_experiment
 from .utils.stdout_capturing import capture_outputs
 from .utils.tensor import batch_to_device
@@ -79,12 +77,12 @@ default_train_conf = OmegaConf.create(default_train_conf)
 
 
 @torch.no_grad()
-def do_evaluation(model, loader, device, loss_fn, conf, pbar=True):
+def do_evaluation(model, loader, device, loss_fn, conf, rank, pbar=True):
     model.eval()
     results = {}
     pr_metrics = defaultdict(PRMetric)
     figures = []
-    if conf.plot is not None:
+    if conf.plot is not None and rank == 0:
         n, plot_fn = conf.plot
         plot_ids = np.random.choice(len(loader), min(len(loader), n), replace=False)
     for i, data in enumerate(
@@ -121,7 +119,8 @@ def do_evaluation(model, loader, device, loss_fn, conf, pbar=True):
                 results[k + f"_recall{int(q)}"].update(v)
         del numbers
     results = {k: results[k].compute() for k in results}
-    return results, {k: v.compute() for k, v in pr_metrics.items()}, figures
+    pr_metrics = {k: v.compute() for k, v in pr_metrics.items()}
+    return results, pr_metrics, figures
 
 
 def filter_parameters(params, regexp):
@@ -146,6 +145,19 @@ def filter_parameters(params, regexp):
 def get_lr_scheduler(optimizer, conf):
     """Get lr scheduler specified by conf.train.lr_schedule."""
     if conf.type not in ["factor", "exp", None]:
+        if hasattr(conf.options, "schedulers"):
+            # Add option to chain multiple schedulers together
+            # This is useful for e.g. warmup, then cosine decay
+            schedulers = []
+            for scheduler_conf in conf.options.schedulers:
+                scheduler = get_lr_scheduler(optimizer, scheduler_conf)
+                schedulers.append(scheduler)
+
+            options = {k: v for k, v in conf.options.items() if k != "schedulers"}
+            return getattr(torch.optim.lr_scheduler, conf.type)(
+                optimizer, schedulers, **options
+            )
+
         return getattr(torch.optim.lr_scheduler, conf.type)(optimizer, **conf.options)
 
     # backward compatibility
@@ -185,7 +197,29 @@ def pack_lr_parameters(params, base_lr, lr_scaling):
     return lr_params
 
 
+def write_dict_summaries(writer, name, items, step):
+    for k, v in items.items():
+        key = f"{name}/{k}"
+        if isinstance(v, dict):
+            writer.add_scalars(key, v, step)
+        elif isinstance(v, tuple):
+            writer.add_pr_curve(key, *v, step)
+        else:
+            writer.add_scalar(key, v, step)
+
+
+def write_image_summaries(writer, name, figures, step):
+    if isinstance(figures, list):
+        for i, figs in enumerate(figures):
+            for k, fig in figs.items():
+                writer.add_figure(f"{name}/{i}_{k}", fig, step)
+    else:
+        for k, fig in figs.items():
+            writer.add_figure(f"{name}/{k}", fig, step)
+
+
 def training(rank, conf, output_dir, args):
+    global results
     if args.restore:
         logger.info(f"Restoring from previous training of {args.experiment}")
         try:
@@ -193,14 +227,18 @@ def training(rank, conf, output_dir, args):
         except AssertionError:
             init_cp = get_best_checkpoint(args.experiment)
         logger.info(f"Restoring from checkpoint {init_cp.name}")
-        init_cp = torch.load(str(init_cp), map_location="cpu")
+        init_cp = torch.load(
+            str(init_cp), map_location="cpu", weights_only=not settings.ALLOW_PICKLE
+        )
         conf = OmegaConf.merge(OmegaConf.create(init_cp["conf"]), conf)
         conf.train = OmegaConf.merge(default_train_conf, conf.train)
         epoch = init_cp["epoch"] + 1
 
         # get the best loss or eval metric from the previous best checkpoint
         best_cp = get_best_checkpoint(args.experiment)
-        best_cp = torch.load(str(best_cp), map_location="cpu")
+        best_cp = torch.load(
+            str(best_cp), map_location="cpu", weights_only=not settings.ALLOW_PICKLE
+        )
         best_eval = best_cp["eval"][conf.train.best_key]
         del best_cp
     else:
@@ -216,7 +254,9 @@ def training(rank, conf, output_dir, args):
             except AssertionError:
                 init_cp = get_best_checkpoint(conf.train.load_experiment)
             # init_cp = get_last_checkpoint(conf.train.load_experiment)
-            init_cp = torch.load(str(init_cp), map_location="cpu")
+            init_cp = torch.load(
+                str(init_cp), map_location="cpu", weights_only=not settings.ALLOW_PICKLE
+            )
             # load the model config of the old setup, and overwrite with current config
             conf.model = OmegaConf.merge(
                 OmegaConf.create(init_cp["conf"]).model, conf.model
@@ -328,7 +368,12 @@ def training(rank, conf, output_dir, args):
     optimizer = optimizer_fn(
         lr_params, lr=conf.train.lr, **conf.train.optimizer_options
     )
-    scaler = GradScaler(enabled=args.mixed_precision is not None)
+    use_mp = args.mixed_precision is not None
+    scaler = (
+        torch.amp.GradScaler("cuda", enabled=use_mp)
+        if hasattr(torch.amp, "GradScaler")
+        else torch.cuda.amp.GradScaler(enabled=use_mp)
+    )
     logger.info(f"Training with mixed_precision={args.mixed_precision}")
 
     mp_dtype = {
@@ -349,7 +394,6 @@ def training(rank, conf, output_dir, args):
         logger.info(
             "Starting training with configuration:\n%s", OmegaConf.to_yaml(conf)
         )
-    losses_ = None
 
     def trace_handler(p):
         # torch.profiler.tensorboard_trace_handler(str(output_dir))
@@ -379,17 +423,16 @@ def training(rank, conf, output_dir, args):
         ):
             for bname, eval_conf in conf.get("benchmarks", {}).items():
                 logger.info(f"Running eval on {bname}")
-                s, f, r = run_benchmark(
+                results, figures, _ = run_benchmark(
                     bname,
                     eval_conf,
-                    EVAL_PATH / bname / args.experiment / str(epoch),
+                    settings.EVAL_PATH / bname / args.experiment / str(epoch),
                     model.eval(),
                 )
-                logger.info(str(s))
-                for metric_name, value in s.items():
-                    writer.add_scalar(f"test/{bname}/{metric_name}", value, epoch)
-                for fig_name, fig in f.items():
-                    writer.add_figure(f"figures/{bname}/{fig_name}", fig, epoch)
+                logger.info(str(results))
+                write_dict_summaries(writer, f"test/{bname}", results, epoch)
+                write_image_summaries(writer, f"figures/{bname}", figures, epoch)
+                del results, figures
 
         # set the seed
         set_seed(conf.train.seed + epoch)
@@ -430,9 +473,13 @@ def training(rank, conf, output_dir, args):
                 tot_n_samples *= train_loader.batch_size
 
             model.train()
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
 
-            with autocast(enabled=args.mixed_precision is not None, dtype=mp_dtype):
+            with torch.autocast(
+                device_type="cuda" if torch.cuda.is_available() else "cpu",
+                enabled=args.mixed_precision is not None,
+                dtype=mp_dtype,
+            ):
                 data = batch_to_device(data, device, non_blocking=True)
                 pred = model(data)
                 losses, _ = loss_fn(pred, data)
@@ -500,8 +547,7 @@ def training(rank, conf, output_dir, args):
                             epoch, it, ", ".join(str_losses)
                         )
                     )
-                    for k, v in losses.items():
-                        writer.add_scalar("training/" + k, v, tot_n_samples)
+                    write_dict_summaries(writer, "training/", losses, tot_n_samples)
                     writer.add_scalar(
                         "training/lr", optimizer.param_groups[0]["lr"], tot_n_samples
                     )
@@ -538,6 +584,7 @@ def training(rank, conf, output_dir, args):
                         device,
                         loss_fn,
                         conf.train,
+                        rank,
                         pbar=(rank == -1),
                     )
 
@@ -548,13 +595,9 @@ def training(rank, conf, output_dir, args):
                         if isinstance(v, float)
                     ]
                     logger.info(f'[Validation] {{{", ".join(str_results)}}}')
-                    for k, v in results.items():
-                        if isinstance(v, dict):
-                            writer.add_scalars(f"figure/val/{k}", v, tot_n_samples)
-                        else:
-                            writer.add_scalar("val/" + k, v, tot_n_samples)
-                    for k, v in pr_metrics.items():
-                        writer.add_pr_curve("val/" + k, *v, tot_n_samples)
+                    write_dict_summaries(writer, "val", results, tot_n_samples)
+                    write_dict_summaries(writer, "val", pr_metrics, tot_n_samples)
+                    write_image_summaries(writer, "figures", figures, tot_n_samples)
                     # @TODO: optional always save checkpoint
                     if results[conf.train.best_key] < best_eval:
                         best_eval = results[conf.train.best_key]
@@ -563,7 +606,6 @@ def training(rank, conf, output_dir, args):
                             optimizer,
                             lr_scheduler,
                             conf,
-                            losses_,
                             results,
                             best_eval,
                             epoch,
@@ -574,12 +616,6 @@ def training(rank, conf, output_dir, args):
                             cp_name="checkpoint_best.tar",
                         )
                         logger.info(f"New best val: {conf.train.best_key}={best_eval}")
-                    if len(figures) > 0:
-                        for i, figs in enumerate(figures):
-                            for name, fig in figs.items():
-                                writer.add_figure(
-                                    f"figures/{i}_{name}", fig, tot_n_samples
-                                )
                 torch.cuda.empty_cache()  # should be cleared at the first iter
 
             if (tot_it % conf.train.save_every_iter == 0 and tot_it > 0) and rank == 0:
@@ -590,6 +626,7 @@ def training(rank, conf, output_dir, args):
                         device,
                         loss_fn,
                         conf.train,
+                        rank,
                         pbar=(rank == -1),
                     )
                     best_eval = results[conf.train.best_key]
@@ -598,7 +635,6 @@ def training(rank, conf, output_dir, args):
                     optimizer,
                     lr_scheduler,
                     conf,
-                    losses_,
                     results,
                     best_eval,
                     epoch,
@@ -611,13 +647,14 @@ def training(rank, conf, output_dir, args):
             if stop:
                 break
 
+        # Store Checkpoint et end of the epoch
         if rank == 0:
+            # at least eval each epoch
             best_eval = save_experiment(
                 model,
                 optimizer,
                 lr_scheduler,
                 conf,
-                losses_,
                 results,
                 best_eval,
                 epoch,
@@ -672,7 +709,7 @@ if __name__ == "__main__":
     args = parser.parse_intermixed_args()
 
     logger.info(f"Starting experiment {args.experiment}")
-    output_dir = Path(TRAINING_PATH, args.experiment)
+    output_dir = Path(settings.TRAINING_PATH, args.experiment)
     output_dir.mkdir(exist_ok=True, parents=True)
 
     conf = OmegaConf.from_cli(args.dotlist)

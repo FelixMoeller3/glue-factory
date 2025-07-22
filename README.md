@@ -163,11 +163,37 @@ Here are the results as Area Under the Curve (AUC) of the pose error at  5/10/20
 | [SuperPoint + LightGlue](gluefactory/configs/superpoint+lightglue-official.yaml) | 56.7 / 72.4 / 83.7 | 51.0 / 68.1 / 80.7 | 66.8 / 79.3 / 87.9 |
 | [SIFT (2K) + LightGlue](gluefactory/configs/sift+lightglue-official.yaml) | ? / ? / ? | 43.5 / 61.5 / 75.9 | 60.4 / 74.3 / 84.5 |
 | [SIFT (4K) + LightGlue](gluefactory/configs/sift+lightglue-official.yaml) | ? / ? / ? | 49.9 / 67.3 / 80.3 | 65.9 / 78.6 / 87.4 |
-| [ALIKED + LightGlue](gluefactory/configs/aliked+lightglue-official.yaml) | ? / ? / ? | 51.5 / 68.1 / 80.4 | 66.3 / 78.7 / 87.5 |
+| [ALIKED + LightGlue](gluefactory/configs/aliked+lightglue-official.yaml) | ? / ? / ? | 52.3 / 68.8 / 81.0 | 66.4 / 79.0 / 87.5 |
 | [SuperPoint + GlueStick](gluefactory/configs/superpoint+lsd+gluestick.yaml) | 53.2 / 69.8 / 81.9 | 46.3 / 64.2 / 78.1 | 64.4 / 77.5 / 86.5 |
 
 </details>
 
+
+#### Scannet-1500
+
+Running the evaluation commands automatically downloads the dataset, which takes about 1.1 GB of disk space.
+
+<details>
+<summary>[Evaluating LightGlue]</summary>
+
+To evaluate the pre-trained SuperPoint+LightGlue model on Scannet-1500, run:
+```bash
+python -m gluefactory.eval.scannet1500 --conf superpoint+lightglue-official
+# or the adaptive variant
+python -m gluefactory.eval.scannet1500 --conf superpoint+lightglue-official \
+    model.matcher.{depth_confidence=0.95,width_confidence=0.95}
+```
+
+Here are the results as Area Under the Curve (AUC) of the pose error at  5/10/20 degrees:
+
+| Methods                                                      | [OpenCV](../gluefactory/robust_estimators/relative_pose/opencv.py) | [PoseLib](../gluefactory/robust_estimators/relative_pose/poselib.py) |
+| ------------------------------------------------------------ | ------------------ | ------------------ |
+| [SuperPoint + SuperGlue](../gluefactory/configs/superpoint+superglue-official.yaml) | 17.9 / 35.4 / 49.5 | 22.7 / 39.5 / 54.3 |
+| [SuperPoint + LightGlue](../gluefactory/configs/superpoint+lightglue-official.yaml) | 17.8 / 34.0 / 52.0 | 21.9 / 39.8 / 55.7 |
+| [DISK + LightGlue](../gluefactory/configs/disk+lightglue-official.yaml) | 9.0 / 18.1 / 29.2 | 12.1 / 23.1 / 35.0 |
+| [ALIKED + LightGlue](../gluefactory/configs/aliked+lightglue-official.yaml) | 15.4 / 31.2 / 47.5 | 19.6 / 36.5 / 52.8 |
+
+</details>
 
 #### ETH3D
 

@@ -3,7 +3,6 @@ import torch
 from scipy.optimize import linear_sum_assignment
 
 from gluefactory.datasets.homographies_deeplsd import warp_lines, warp_points
-from gluefactory.models.lines.lbd import PyTLBD
 from gluefactory.models.lines.line_distances import (
     angular_distance,
     get_area_line_dist,
@@ -411,7 +410,7 @@ def H_estimation(line_seg1, line_seg2, H_gt, img_size, reproj_thresh=3, tol_px=5
 
 
 def match_segments_lbd(img, line_seg1, line_seg2, H, img_size):
-    # imoprt Locally to prevent GF from crashing
+    # import Locally to prevent GF from crashing
     from gluefactory.models.lines.lbd import PyTLBD
 
     """ Match two sets of line segments with LBD. """

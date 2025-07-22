@@ -122,7 +122,7 @@ class HPatchesPipeline(EvalPipeline):
         "data": {
             "batch_size": 1,
             "name": "hpatches",
-            "num_workers": 16,
+            "num_workers": 6,
             "preprocessing": {
                 "resize": IMAGE_SHAPE  # [320, 240],  # we also resize during eval to have comparable metrics
                 # "side": "short",

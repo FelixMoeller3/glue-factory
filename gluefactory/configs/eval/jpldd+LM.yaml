@@ -2,29 +2,13 @@ model:
   name: two_view_pipeline
   extractor:
     name: extractors.joint_point_line_extractor
+    line_df_decoder_channels: 64
     training:
       do: False
-    max_num_keypoints: 1024
+    max_num_keypoints: 2048
     line_detection:
       do: True
-      conf:
-        max_point_size: 1500
-        min_line_length: 6
-        max_line_length: Null
-        samples: [24]
-        distance_map:
-            max_value: 5 # this is fixed and only determined by the distance threshold
-            threshold: 0.45 # lower value gets more lines
-            smooth_threshold: 0.8 # higher seems to be less strict (i.e. more lines)
-            avg_filter_size: 13
-            avg_filter_padding: 6
-            avg_filter_stride: 1
-            inlier_ratio: 0.75 # gives artifacts at 0.5 (lower is more lines)
-            max_accepted_mean_value: 0.5 # be very careful with this. Only small increases can caus
-
-        nms: False
-      merge: False
-    checkpoint: /local/home/Point-Line/outputs/training/oxparis_800_focal/checkpoint_best.tar
+    #checkpoint: /local/home/Point-Line/outputs/training/oxparis_800_focal/checkpoint_best.tar
   matcher:
     name: matchers.line_matcher
     line_dist: orth
@@ -35,14 +19,31 @@ benchmarks:
         side: long
         resize: 1600
     eval:
-      estimator: opencv
-      ransac_th: 1.0
+      estimator: poselib
+      ransac_th: -1
   hpatches:
+    data:
+      preprocessing:
+        side: long
+        resize: 800
     eval:
-      estimator: opencv
-      ransac_th: 0.5
+      estimator: poselib
+      ransac_th: -1
     model:
       extractor:
-        max_num_keypoints: 512 # overwrite config above
+        max_num_keypoints: 1024
+    use_points: False
+    use_lines: True
+  hpatches_lines:
+    data:
+      preprocessing:
+        side: long
+        resize: 800
+    eval:
+      estimator: poselib
+      ransac_th: -1
+    model:
+      extractor:
+        max_num_keypoints: 1024
     use_points: False
     use_lines: True

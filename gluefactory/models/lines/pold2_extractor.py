@@ -7,11 +7,13 @@ Usage:
 import logging
 import os
 from functools import cmp_to_key
+from typing import List, Optional
 
 import numpy as np
 import torch
 import torch.nn as nn
 from omegaconf import OmegaConf
+from torch import Tensor
 
 from gluefactory.models.base_model import BaseModel
 from gluefactory.models.lines.line_refinement import merge_lines_torch
@@ -21,15 +23,16 @@ logger = logging.getLogger(__name__)
 
 
 class LineExtractor(BaseModel):
-
     default_conf = {
         "samples": [24],  # Number of samples to take along the line
         "max_point_size": 1500,  # Maximum number of points to consider
         "min_line_length": 6,  # Minimum line length
         "max_line_length": None,  # Maximum line length
         "max_lines": 2000,  # Maximum number of lines to consider
+        "force_num_lines": False,  # Force the number of lines for batching for ex.
         "distance_map": {
-            "max_value": 5,  # Maximum value to which the distance map is capped [Line Neighbourhood in Extractor Config]
+            "max_value": 5,
+            # Maximum value to which the distance map is capped [Line Neighbourhood in Extractor Config]
             "threshold": 0.45,  # Threshold for generating binary distance map
             "smooth_threshold": 0.8,  # Threshold for smoothened distance map
             "avg_filter_size": 13,  # Size of the average filter
@@ -50,6 +53,7 @@ class LineExtractor(BaseModel):
         "coeff_dir": "line_extraction_coeffs",
         "debug": False,
         "debug_dir": "tmp",
+        "return_line_descriptors": False,
     }
 
     def _init(self, conf: OmegaConf):
@@ -103,9 +107,7 @@ class LineExtractor(BaseModel):
             f"Loading weights from {coeff_file_path} and {coeff_second_file_path}"
         )
 
-        if os.path.exists(coeff_file_path) and os.path.exists(
-            coeff_second_file_path
-        ):
+        if os.path.exists(coeff_file_path) and os.path.exists(coeff_second_file_path):
             self.all_coeffs_df = torch.from_numpy(np.load(coeff_file_path)).to(
                 self.device
             )
@@ -122,7 +124,6 @@ class LineExtractor(BaseModel):
                 )
             )
 
-
     def precompute_brute_force_coeffs(
         self, max_line_length, coeff_dir, coeff_file_path, coeff_second_file_path
     ):
@@ -137,10 +138,6 @@ class LineExtractor(BaseModel):
             pad = max_line_length - i
             left_pad = torch.zeros(pad // 2, 1).to(self.device)
             right_pad = torch.zeros(pad - pad // 2, 1).to(self.device)
-
-            # print(f"i: {i}")
-            # print(f"left_pad: {left_pad.shape}, c1: {c1.shape}, right_pad: {right_pad.shape}")
-            # print(f"all_coeffs: {all_coeffs.shape}, cat: {torch.cat((left_pad, c1, right_pad), dim=0).view(1,-1).shape}")
 
             all_coeffs = torch.cat(
                 (
@@ -243,7 +240,7 @@ class LineExtractor(BaseModel):
         diff = lines[:, 0] - lines[:, 1]
         diff = torch.sum(diff**2, dim=1)
 
-        return indices_image[diff > (min_line_length**2)]
+        return indices_image[(diff > (min_line_length**2)).to(indices_image.device)]
 
     def filter_large_lines(self, points, indices_image):
         """
@@ -328,7 +325,6 @@ class LineExtractor(BaseModel):
     def brute_force_filter_with_distance_field(
         self,
         points: torch.Tensor,
-        binary_distance_map: torch.Tensor,
         distance_map: torch.Tensor,
         indices: torch.Tensor,
     ) -> torch.Tensor:
@@ -396,13 +392,20 @@ class LineExtractor(BaseModel):
     def multi_stage_filter(
         self, points, binary_distance_map, distance_map, indices_image
     ):
+        # Ensure all tensors are on the same device
+        device = points.device
+        if binary_distance_map.device != device:
+            binary_distance_map = binary_distance_map.to(device)
+        if distance_map.device != device:
+            distance_map = distance_map.to(device)
+        if indices_image.device != device:
+            indices_image = indices_image.to(device)
 
         # Filter out small lines
         indices_image = self.filter_small_lines(points, indices_image)
         indices_image = self.filter_large_lines(points, indices_image)
 
         for i in range(len(self.samples)):
-
             # Weak filter - Handcrafted heuristic on distance field
             indices_image = self.filter_with_distance_field(
                 points, binary_distance_map, distance_map, indices_image, i
@@ -414,47 +417,52 @@ class LineExtractor(BaseModel):
 
         # Strong filter - brute force sampling for distance field
         indices_image = self.brute_force_filter_with_distance_field(
-            points, binary_distance_map, distance_map, indices_image
+            points, distance_map, indices_image
         )
         if self.conf.debug:
-            print(f"Num lines after brute force DF stage: {indices_image.shape[0]}")        
+            print(f"Num lines after brute force DF stage: {indices_image.shape[0]}")
 
         return indices_image
 
-    def _forward(self, data: dict) -> torch.Tensor:
-        points = data["points"]
-        distance_map = data["distance_map"]
-        descriptors = data["descriptors"]
+    def detect_lines(
+        self,
+        keypoints: torch.Tensor,
+        distance_field: torch.Tensor,
+        keypoint_descriptors: Optional[torch.Tensor] = None,
+    ) -> dict[str, Tensor]:
+        """
+        Detect lines on one image based on keypoints and distance field.
 
+        Returns: list of lines, list of line_descriptors(can be none), list of line kp indices
+        """
         # Get indices
-        if len(points) > self.max_point_size:
+        if len(keypoints) > self.max_point_size:
             logger.warning(
-                f"WARNING: We have more than {self.max_point_size} points in this image ({len(points)}), keeping only {self.max_point_size} firsts"
+                f"WARNING: We have more than {self.max_point_size} points in this image ({len(keypoints)}), keeping only {self.max_point_size} firsts"
             )
-            points = points[: self.max_point_size]
+            keypoints = keypoints[: self.max_point_size]
 
         # Precompute indices
-        number_pairs = int(len(points) * (len(points) - 1) / 2)
+        number_pairs = int(len(keypoints) * (len(keypoints) - 1) / 2)
         indices_image = self.indices[:number_pairs]
 
         # normalize DF to [0, 1] by dividing by max value TODO: strict positive Z-Score normalization ?
         df_max = self.conf.distance_map.max_value
-        distance_map = distance_map.float()
+        distance_map = distance_field.float()
         distance_map /= df_max
 
         # Process distance map
         binary_distance_map = self.process_distance_map(distance_map)
 
-
         # Apply two stage filter
         filtered_idx = self.multi_stage_filter(
-            points, binary_distance_map, distance_map, indices_image
+            keypoints, binary_distance_map, distance_map, indices_image
         )
 
         # Apply NMS
         if self.conf.nms:
             # Get line end points
-            lines = points[filtered_idx]
+            lines = keypoints[filtered_idx]
 
             # Append indices to lines - (N,2,3)
             # Lines are now in the form (x1, y1, idx1), (x2, y2, idx2), where idx1 and idx2 are the indices of the keypoints
@@ -470,28 +478,81 @@ class LineExtractor(BaseModel):
         # Prepare output
         if len(filtered_idx) == 0:
             lines = torch.zeros(0, 2, 2).to(self.device)
-            line_descriptors = torch.zeros(0, 2, 128).to(self.device)
+            if self.conf.return_line_descriptors:
+                line_descriptors = torch.zeros(0, 2, 128).to(self.device)
         else:
-            lines = points[filtered_idx]
-            line_descriptors = torch.stack(
-                [descriptors[filtered_idx[:, 0]], descriptors[filtered_idx[:, 1]]],
-                dim=1,
-            )
+            lines = keypoints[filtered_idx]
+            if self.conf.return_line_descriptors:
+                line_descriptors = torch.stack(
+                    [
+                        keypoint_descriptors[filtered_idx[:, 0]],
+                        keypoint_descriptors[filtered_idx[:, 1]],
+                    ],
+                    dim=1,
+                )
 
-        # sort lines by length and select the top k (max_lines)
+        # sort lines by length and select the top k (longer lines are better)
         line_lengths = torch.sum((lines[:, 0] - lines[:, 1]) ** 2, dim=1)
         _, sorted_idx = torch.sort(line_lengths, descending=True)
         sorted_idx = sorted_idx[: self.conf.max_lines]
 
         lines = lines[sorted_idx]
-        line_descriptors = line_descriptors[sorted_idx]
         filtered_idx = filtered_idx[sorted_idx]
 
-        return {
+        n = len(lines)
+        valid_mask = np.ones(n, dtype=bool)
+        if self.conf.force_num_lines:
+            pad = self.conf.max_num_lines - n
+            lines = np.concatenate(
+                [lines, np.zeros((pad, 2, 2), dtype=np.float32)], axis=0
+            )
+            valid_mask = np.concatenate([valid_mask, np.zeros(pad, dtype=bool)], axis=0)
+
+        ret = {
             "lines": lines,
-            "line_descriptors": line_descriptors,
+            "valid_lines": valid_mask,
             "line_endpoint_indices": filtered_idx,
         }
+
+        if self.conf.return_line_descriptors:
+            ret["line_descriptors"] = line_descriptors[sorted_idx]
+        return ret
+
+    def _forward(self, data: dict) -> dict[str, List[Tensor]]:
+        """
+        Extract lines from a batch of images.
+        Args:
+            data: dictionary, needs to contain batched tensors containing keypoints, distance field and optionally descriptors.
+
+        Returns: dictionary with lists of tensors, containing the lines for each image: shape: [N_images x (n_lines, 2, 2)]
+        """
+        points = data["keypoints"]  # can be list or tensor
+        distance_map = data["line_distancefield"]  # is tensor
+        descriptors = data["kp_descriptors"]  # can be list or tensor
+
+        lines = []
+        valid_lines = []
+        line_descriptors = []
+        line_endpoint_indices = []
+
+        for i in range(len(points)):
+            pred = self.detect_lines(
+                points[i].cpu(), distance_map[i].cpu(), descriptors[i].cpu()
+            )
+            lines.append(torch.Tensor(pred["lines"]))
+            valid_lines.append(torch.Tensor(pred["valid_lines"]))
+            if self.conf.return_line_descriptors:
+                line_descriptors.append(torch.Tensor(["line_descriptors"]))
+            line_endpoint_indices.append(torch.Tensor(pred["line_endpoint_indices"]))
+
+        ret = {
+            "lines": lines,
+            "valid_lines": valid_lines,
+            "line_endpoint_indices": line_endpoint_indices,
+        }
+        if self.conf.return_line_descriptors:
+            ret["line_descriptors"] = line_descriptors
+        return ret
 
     def loss(self, pred, data):
         raise NotImplementedError

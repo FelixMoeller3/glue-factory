@@ -4,7 +4,7 @@ Simply load images from a folder or nested folders (does not have any split).
 
 import argparse
 import logging
-import tarfile
+import zipfile
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -54,7 +54,7 @@ class HPatches(BaseDataset, torch.utils.data.Dataset):
         "v_astronautis",
         "v_talent",
     )
-    url = "http://icvl.ee.ic.ac.uk/vbalnt/hpatches/hpatches-sequences-release.tar.gz"
+    url = "https://huggingface.co/datasets/vbalnt/hpatches/resolve/main/hpatches-sequences-release.zip"  # noqa: E501
 
     def _init(self, conf):
         assert conf.batch_size == 1
@@ -79,11 +79,13 @@ class HPatches(BaseDataset, torch.utils.data.Dataset):
     def download(self):
         data_dir = self.root.parent
         data_dir.mkdir(exist_ok=True, parents=True)
-        tar_path = data_dir / self.url.rsplit("/", 1)[-1]
-        torch.hub.download_url_to_file(self.url, tar_path)
-        with tarfile.open(tar_path) as tar:
-            tar.extractall(data_dir)
-        tar_path.unlink()
+        zip_path = data_dir / self.url.rsplit("/", 1)[-1]
+        torch.hub.download_url_to_file(self.url, zip_path)
+        # Open the ZIP file
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            # Extract all contents to a directory
+            zip_ref.extractall(data_dir)
+        zip_path.unlink()  # Remove the zip file after extraction
 
     def get_dataset(self, split):
         assert split in ["val", "test"]

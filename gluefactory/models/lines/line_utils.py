@@ -4,11 +4,9 @@ A set of geometry tools to handle lines in Pytorch and Numpy.
 
 import numpy as np
 import torch
-from homography_est import LineSegment, ransac_line_homography
 from torch.nn.functional import pixel_shuffle, softmax
 
 from gluefactory.datasets.homographies_deeplsd import warp_lines, warp_points
-from gluefactory.geometry.homography import warp_lines_torch
 from gluefactory.utils.image import compute_image_grad
 
 UPM_EPS = 1e-8

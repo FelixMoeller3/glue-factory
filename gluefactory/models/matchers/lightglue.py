@@ -7,7 +7,6 @@ import torch
 import torch.nn.functional as F
 from omegaconf import OmegaConf
 from torch import nn
-from torch.utils.checkpoint import checkpoint
 
 from ...settings import DATA_PATH
 from ..utils.losses import NLLLoss
@@ -17,8 +16,15 @@ FLASH_AVAILABLE = hasattr(F, "scaled_dot_product_attention")
 
 torch.backends.cudnn.deterministic = True
 
+# Hacky workaround for torch.amp.custom_fwd to support older versions of PyTorch.
+AMP_CUSTOM_FWD_F32 = (
+    torch.amp.custom_fwd(cast_inputs=torch.float32, device_type="cuda")
+    if hasattr(torch.amp, "custom_fwd")
+    else torch.cuda.amp.custom_fwd(cast_inputs=torch.float32)
+)
 
-@torch.cuda.amp.custom_fwd(cast_inputs=torch.float32)
+
+@AMP_CUSTOM_FWD_F32
 def normalize_keypoints(
     kpts: torch.Tensor, size: Optional[torch.Tensor] = None
 ) -> torch.Tensor:
@@ -384,6 +390,13 @@ class LightGlue(nn.Module):
                 state_dict = {k.replace(*pattern): v for k, v in state_dict.items()}
             self.load_state_dict(state_dict, strict=False)
 
+        self.register_buffer(
+            "confidence_thresholds",
+            torch.Tensor(
+                [self.confidence_threshold(i) for i in range(self.conf.n_layers)]
+            ),
+        )
+
     def compile(self, mode="reduce-overhead"):
         if self.conf.width_confidence != -1:
             warnings.warn(
@@ -459,8 +472,13 @@ class LightGlue(nn.Module):
         token0, token1 = None, None
         for i in range(self.conf.n_layers):
             if self.conf.checkpointed and self.training:
-                desc0, desc1 = checkpoint(
-                    self.transformers[i], desc0, desc1, encoding0, encoding1
+                desc0, desc1 = torch.utils.checkpoint.checkpoint(
+                    self.transformers[i],
+                    desc0,
+                    desc1,
+                    encoding0,
+                    encoding1,
+                    use_reentrant=False,  # Recommended by torch, default was True
                 )
             else:
                 desc0, desc1 = self.transformers[i](desc0, desc1, encoding0, encoding1)
