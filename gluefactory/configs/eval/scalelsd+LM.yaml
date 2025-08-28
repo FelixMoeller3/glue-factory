@@ -1,15 +1,8 @@
 model:
     name: two_view_pipeline
     extractor:
-        name: lines.deeplsd
-        model_conf:
-            detect_lines: True
-            line_detection_params:
-                use_img_grad_angle: True
-                merge: False
-                grad_nfa: True
-                filtering: True  # True or strict
-                faster_lsd: False
+        name: lines.scalelsd
+        threshold: 10
 
     matcher:
         name: matchers.line_matcher
